@@ -94,6 +94,9 @@ export class AuthService {
       delete userWithoutPassword.password;
       return userWithoutPassword;
     } catch (e) {
+      // ADICIONADO: Log do erro original para depuração
+      console.error('Erro detalhado durante a validação do usuário:', e);
+
       if (
         e instanceof UnauthorizedException ||
         e instanceof BadRequestException
