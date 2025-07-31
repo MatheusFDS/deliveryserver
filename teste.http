@@ -1,0 +1,162 @@
+### Criar um novo usuário
+POST http://localhost:4000/users
+Content-Type: application/json
+Authorization: Bearer YOUR_JWT_TOKEN_HERE
+
+{
+  "email": "user@tenant5.com",
+  "password": "password",
+  "roleId": 2
+}
+
+### Login para obter o token JWT
+POST http://localhost:4000/auth/login
+Content-Type: application/json
+
+{
+  "email": "admin@tenant1.com",
+  "password": "password"
+}
+
+### Obter todos os usuários usando o token JWT
+GET http://localhost:4000/users
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbWFpbCI6ImFkbWluQHRlbmFudDEuY29tIiwic3ViIjoxLCJyb2xlIjoiYWRtaW4iLCJ0ZW5hbnRJZCI6MSwiaWF0IjoxNzE5ODk4Mjc2LCJleHAiOjE3MTk5MDE4NzZ9.hrFdEPDULDrIU-NymNc7fxfAQSZp4UUZhnlvvIhvFH8
+
+### Logout usando o token JWT
+POST http://localhost:4000/auth/logout
+Authorization: Bearer YOUR_JWT_TOKEN_HERE
+
+### Criar um novo motorista
+POST http://localhost:4000/drivers
+Content-Type: application/json
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbWFpbCI6ImFkbWluQHRlbmFudDEuY29tIiwic3ViIjoxLCJyb2xlIjoiYWRtaW4iLCJ0ZW5hbnRJZCI6MSwiaWF0IjoxNzE5ODA0MDAwLCJleHAiOjE3MTk4MDc2MDB9.UewEn7xgQQFHWYV3IuYFVd2_mRpC-eZ-Mpc2huQHXoQ
+
+{
+  "name": "Max Doe",
+  "license": "ZBC123456",
+  "cpf": "123.456.789-08"
+}
+
+### Obter todos os motoristas usando o token JWT
+GET http://localhost:4000/drivers
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbWFpbCI6ImFkbWluQHRlbmFudDEuY29tIiwic3ViIjoxLCJyb2xlIjoiYWRtaW4iLCJ0ZW5hbnRJZCI6MSwiaWF0IjoxNzE5ODk4Mjc2LCJleHAiOjE3MTk5MDE4NzZ9.hrFdEPDULDrIU-NymNc7fxfAQSZp4UUZhnlvvIhvFH8
+
+### Criar um novo veículo
+POST http://localhost:4000/vehicles
+Content-Type: application/json
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbWFpbCI6ImFkbWluQHRlbmFudDEuY29tIiwic3ViIjoxLCJyb2xlIjoiYWRtaW4iLCJ0ZW5hbnRJZCI6MSwiaWF0IjoxNzE5ODA0MDAwLCJleHAiOjE3MTk4MDc2MDB9.UewEn7xgQQFHWYV3IuYFVd2_mRpC-eZ-Mpc2huQHXoQ
+
+{
+  "model": "Chevrolet Onix",
+  "plate": "AYZ9876",
+  "driverId": 4,
+  "categoryId": 1
+}
+
+### Obter todas as categorias usando o token JWT
+GET http://localhost:4000/category
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbWFpbCI6ImFkbWluQHRlbmFudDEuY29tIiwic3ViIjoxLCJyb2xlIjoiYWRtaW4iLCJ0ZW5hbnRJZCI6MSwiaWF0IjoxNzIwODIwNTMzLCJleHAiOjE3MjA4Mjc3MzN9.3Guu-OejKSv4xI9CzVgqlM1iJKQJXDmTwpnVmGScC7Z
+
+### Obter todos os veículos usando o token JWT
+GET http://localhost:4000/vehicles
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbWFpbCI6ImFkbWluQHRlbmFudDEuY29tIiwic3ViIjoxLCJyb2xlIjoiYWRtaW4iLCJ0ZW5hbnRJZCI6MSwiaWF0IjoxNzE5ODk4Mjc2LCJleHAiOjE3MTk5MDE4NzZ9.hrFdEPDULDrIU-NymNc7fxfAQSZp4UUZhnlvvIhvFH8
+
+### Criar uma nova direção
+POST http://localhost:4000/directions
+Content-Type: application/json
+Authorization: Bearer YOUR_JWT_TOKEN_HERE
+
+{
+  "rangeInicio": "01000000",
+  "rangeFim": "01259999",
+  "valorDirecao": "1",
+  "regiao": "Zona Central"
+}
+
+### Obter todas as direções usando o token JWT
+GET http://localhost:4000/directions
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbWFpbCI6ImFkbWluQHRlbmFudDEuY29tIiwic3ViIjoxLCJyb2xlIjoiYWRtaW4iLCJ0ZW5hbnRJZCI6MSwiaWF0IjoxNzE5ODk4Mjc2LCJleHAiOjE3MTk5MDE4NzZ9.hrFdEPDULDrIU-NymNc7fxfAQSZp4UUZhnlvvIhvFH8
+
+### Obter uma direção por ID usando o token JWT
+GET http://localhost:4000/directions/1
+Authorization: Bearer YOUR_JWT_TOKEN_HERE
+
+### Atualizar uma direção
+PATCH http://localhost:4000/directions/1
+Content-Type: application/json
+Authorization: Bearer YOUR_JWT_TOKEN_HERE
+
+{
+  "valorDirecao": "2"
+}
+
+### Remover uma direção
+DELETE http://localhost:4000/directions/1
+Authorization: Bearer YOUR_JWT_TOKEN_HERE
+
+### Obter todos os pedidos usando o token JWT
+GET http://localhost:4000/orders
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbWFpbCI6ImFkbWluQHRlbmFudDEuY29tIiwic3ViIjoxLCJyb2xlIjoiYWRtaW4iLCJ0ZW5hbnRJZCI6MSwiaWF0IjoxNzE5OTI2NDAyLCJleHAiOjE3MTk5MzAwMDJ9.9XoQJlkk9UWGolH_8FdT6j5zdw6Pi-LQHk_NolGsmMo
+
+### Obter todos os roteiros usando o token JWT
+GET http://localhost:4000/delivery
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbWFpbCI6ImFkbWluQHRlbmFudDEuY29tIiwic3ViIjoxLCJyb2xlIjoiYWRtaW4iLCJ0ZW5hbnRJZCI6MSwiaWF0IjoxNzE5ODk4Mjc2LCJleHAiOjE3MTk5MDE4NzZ9.hrFdEPDULDrIU-NymNc7fxfAQSZp4UUZhnlvvIhvFH8
+
+### Criar um novo delivery
+POST http://localhost:4000/delivery
+Content-Type: application/json
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbWFpbCI6ImFkbWluQHRlbmFudDEuY29tIiwic3ViIjoxLCJyb2xlIjoiYWRtaW4iLCJ0ZW5hbnRJZCI6MSwiaWF0IjoxNzE5ODQyNzI1LCJleHAiOjE3MTk4NDYzMjV9.6HGk55Igj4lE-czYYAlCUdqTr5WzIWvE9svd4TfxP-o
+
+{
+  "motoristaId": 1, 
+  "veiculoId": 1,
+  "orders": [1,2]
+}
+
+### Obter os delivery
+GET  http://localhost:4000/delivery
+Content-Type: application/json
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbWFpbCI6ImFkbWluQHRlbmFudDEuY29tIiwic3ViIjoxLCJyb2xlIjoiYWRtaW4iLCJ0ZW5hbnRJZCI6MSwiaWF0IjoxNzE5OTI2NDAyLCJleHAiOjE3MTk5MzAwMDJ9.9XoQJlkk9UWGolH_8FdT6j5zdw6Pi-LQHk_NolGsmMo
+
+
+### Obter os delivery
+PATCH  http://localhost:4000/delivery/4
+Content-Type: application/json
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbWFpbCI6ImFkbWluQHRlbmFudDEuY29tIiwic3ViIjoxLCJyb2xlIjoiYWRtaW4iLCJ0ZW5hbnRJZCI6MSwiaWF0IjoxNzE5ODUyMDQ1LCJleHAiOjE3MTk4NTU2NDV9.d_mcQ4NkTt4Zp370AvEa-3LgVjyAugyM43KMChx_OHw
+
+{
+  "status": "Finalizado", 
+  "dataFim": "2024-08-01T14:09:29.913Z"
+}
+
+### Obter categorias
+GET  http://localhost:4000/category
+Content-Type: application/json
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbWFpbCI6ImFkbWluQHRlbmFudDEuY29tIiwic3ViIjoxLCJyb2xlIjoiYWRtaW4iLCJ0ZW5hbnRJZCI6MSwiaWF0IjoxNzE5ODk4Mjc2LCJleHAiOjE3MTk5MDE4NzZ9.hrFdEPDULDrIU-NymNc7fxfAQSZp4UUZhnlvvIhvFH8
+
+### Obter payments
+GET  http://localhost:4000/payments
+Content-Type: application/json
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbWFpbCI6ImFkbWluQHRlbmFudDEuY29tIiwic3ViIjoxLCJyb2xlIjoiYWRtaW4iLCJ0ZW5hbnRJZCI6MSwiaWF0IjoxNzE5OTMwMjkwLCJleHAiOjE3MTk5MzM4OTB9.qyOwr0LbvJiUduvX_anmtER6FAtFDsY7_oUTHAKAmQc
+
+
+### Criar um novo payment
+POST http://localhost:4000/delivery
+Content-Type: application/json
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbWFpbCI6ImFkbWluQHRlbmFudDEuY29tIiwic3ViIjoxLCJyb2xlIjoiYWRtaW4iLCJ0ZW5hbnRJZCI6MSwiaWF0IjoxNzE5ODQyNzI1LCJleHAiOjE3MTk4NDYzMjV9.6HGk55Igj4lE-czYYAlCUdqTr5WzIWvE9svd4TfxP-o
+
+
+{
+  "motoristaId": 1, 
+  "veiculoId": 1,
+  "orders": [1,2]
+}
+
+
+### Get Statistics
+GET http://localhost:4000/statistics?startDate=2024-01-01&endDate=2024-12-31
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbWFpbCI6ImFkbWluQHRlbmFudDEuY29tIiwic3ViIjoxLCJyb2xlIjoiYWRtaW4iLCJ0ZW5hbnRJZCI6MSwiaWF0IjoxNzE5ODk2MzM3LCJleHAiOjE3MTk4OTk5Mzd9.M8Ruxv9ntvNMkz0eI9xkSJpXGLVdpu8s_lsJZtHGQI4
+
+
+GET http://localhost:8080/clientes
+Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJhZG1pbiIsImlhdCI6MTcyOTkwNTUxOCwiZXhwIjoxNzI5OTA5MTE4fQ.kJsptjUpfGLwByDQ7_tdKxnaFOYnT-MoFuxwlHvKsZ0
