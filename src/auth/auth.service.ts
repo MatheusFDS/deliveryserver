@@ -57,6 +57,9 @@ export class AuthService {
       }
 
       const normalizedDomain = domain ? domain.split(':')[0] : undefined;
+      console.log(
+        `Validating user: ${user.email}, Domain: ${normalizedDomain}`,
+      );
 
       if (user.role.name === 'superadmin' || user.role.name === 'SUPERADMIN') {
         if (normalizedDomain === 'deliveryweb-production.up.railway.app') {
@@ -94,9 +97,6 @@ export class AuthService {
       delete userWithoutPassword.password;
       return userWithoutPassword;
     } catch (e) {
-      // ADICIONADO: Log do erro original para depuração
-      console.error('Erro detalhado durante a validação do usuário:', e);
-
       if (
         e instanceof UnauthorizedException ||
         e instanceof BadRequestException
