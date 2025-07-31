@@ -59,10 +59,7 @@ export class AuthService {
       const normalizedDomain = domain ? domain.split(':')[0] : undefined;
 
       if (user.role.name === 'superadmin' || user.role.name === 'SUPERADMIN') {
-        if (
-          normalizedDomain === 'flowroute.shop' ||
-          normalizedDomain === 'deliveryweb-ten.vercel.app'
-        ) {
+        if (normalizedDomain === 'deliveryweb-production.up.railway.app') {
           const userWithoutPassword = { ...user };
           delete userWithoutPassword.password;
           return userWithoutPassword;

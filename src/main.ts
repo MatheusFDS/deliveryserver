@@ -9,8 +9,9 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
   const allowedOrigins = [
-    'https://deliveryweb-ten.vercel.app',
-    'http://localhost:3000',
+    'https://deliveryweb-production.up.railway.app',
+    'http://localhost:8080',
+    'http://10.250.13.156:8080',
   ];
 
   const corsOptions: CorsOptions = {
