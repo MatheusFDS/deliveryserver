@@ -365,7 +365,7 @@ export class UsersService {
     }
 
     const requestingUserTenantId = requestingUser.tenantId;
-    if (!requestingUserTenantId) {
+    if (!requestingUserTenantId && requestingUser.role.name !== 'superadmin') {
       throw new ForbiddenException(
         'Administrador não associado a um tenant para inativar usuário.',
       );
