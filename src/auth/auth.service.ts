@@ -56,13 +56,17 @@ export class AuthService {
         throw new UnauthorizedException('Credenciais inválidas');
       }
 
+      if (!user.isActive) {
+        throw new UnauthorizedException('Usuário inativo.');
+      }
+
       const normalizedDomain = domain ? domain.split(':')[0] : undefined;
-      console.log(
-        `Validating user: ${user.email}, Domain: ${normalizedDomain}`,
-      );
 
       if (user.role.name === 'superadmin' || user.role.name === 'SUPERADMIN') {
-        if (normalizedDomain === 'deliveryweb-production.up.railway.app') {
+        if (
+          normalizedDomain === 'deliveryweb-production.up.railway.app' ||
+          normalizedDomain === 'localhost'
+        ) {
           const userWithoutPassword = { ...user };
           delete userWithoutPassword.password;
           return userWithoutPassword;
@@ -70,6 +74,12 @@ export class AuthService {
           throw new UnauthorizedException(
             'Acesso restrito para superadmin fora do domínio específico.',
           );
+        }
+      }
+
+      if (user.tenantId) {
+        if (!user.tenant || !user.tenant.isActive) {
+          throw new UnauthorizedException('Tenant inativo.');
         }
       }
 
@@ -124,7 +134,6 @@ export class AuthService {
       (user.role.name === 'driver' || user.role.name === 'DRIVER') &&
       !user.driver
     ) {
-      // Lógica para drivers sem driver associado, se necessário
     }
 
     const accessToken = this.jwtService.sign(payload, {
@@ -166,6 +175,7 @@ export class AuthService {
         include: {
           role: true,
           driver: { select: { id: true } },
+          tenant: true,
         },
       });
 
@@ -173,6 +183,16 @@ export class AuthService {
         throw new UnauthorizedException(
           'Usuário do token de atualização não encontrado.',
         );
+      }
+
+      if (!userWithDetails.isActive) {
+        throw new UnauthorizedException('Usuário inativo.');
+      }
+      if (
+        userWithDetails.tenantId &&
+        (!userWithDetails.tenant || !userWithDetails.tenant.isActive)
+      ) {
+        throw new UnauthorizedException('Tenant inativo.');
       }
 
       const newAccessTokenPayload: any = {
@@ -226,5 +246,13 @@ export class AuthService {
     } catch (e) {
       return true;
     }
+  }
+
+  async invalidateTokensForUser(): Promise<void> {
+    throw new NotImplementedException('Método não implementado.');
+  }
+
+  async invalidateTokensForTenant(): Promise<void> {
+    throw new NotImplementedException('Método não implementado.');
   }
 }

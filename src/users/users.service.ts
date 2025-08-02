@@ -101,7 +101,6 @@ export class UsersService {
       );
     }
 
-    // Validação NOVO: Permite apenas um admin ativo por tenant na CRIAÇÃO
     if (targetRole.name === 'admin') {
       const existingAdmin = await this.prisma.user.findFirst({
         where: {
@@ -271,7 +270,6 @@ export class UsersService {
       updateData.password = await bcrypt.hash(updateUserDto.password, 10);
     }
 
-    // Declare targetRole outside the if block for scope, and initialize it.
     let targetRole: { name: string; isPlatformRole: boolean } | null = null;
 
     if (updateUserDto.roleId) {
@@ -285,17 +283,16 @@ export class UsersService {
         );
       }
 
-      // Validação NOVO: Permite apenas um admin ativo por tenant na ATUALIZAÇÃO da role
       if (targetRole.name === 'admin') {
-        const existingAdminInTenant = await this.prisma.user.findFirst({
+        const existingAdmin = await this.prisma.user.findFirst({
           where: {
             tenantId: requestingUserTenantId,
             role: { name: 'admin' },
             isActive: true,
-            id: { not: id }, // Exclui o próprio usuário que está sendo atualizado
+            id: { not: id },
           },
         });
-        if (existingAdminInTenant) {
+        if (existingAdmin) {
           throw new BadRequestException(
             'Já existe outro administrador ativo para esta empresa. Somente um administrador por empresa é permitido.',
           );
@@ -323,16 +320,6 @@ export class UsersService {
         }
       }
     } else {
-      // Lógica adicional para garantir que o ÚLTIMO admin não possa ser desativado
-      // ou ter sua role alterada para não-admin se não houver outro admin.
-      // Isso é mais complexo e pode ser um cenário edge-case, dependendo da sua regra de negócio.
-      // A validação de 'isActive' para o próprio admin já está acima.
-      // Se a role não está sendo alterada (updateUserDto.roleId é nulo/undefined),
-      // mas o usuário a ser atualizado É um admin e isActive está sendo setado para false,
-      // essa lógica já está coberta pela sua validação anterior: 'Administradores não podem se inativar'.
-      // No entanto, se um admin mudar sua role para user/driver, e ele for o único admin,
-      // a empresa ficará sem admin. Sua regra atual impede admins de mudar a role de OUTROS admins.
-      // Se a mudança for no próprio admin, a permissão já é mais restrita.
     }
 
     return this.prisma.user.update({
@@ -395,14 +382,13 @@ export class UsersService {
       throw new BadRequestException('Administradores não podem se inativar.');
     }
 
-    // NOVO: Validação adicional para garantir que o último admin não seja inativado
     if (userToInactivate.role.name === 'admin' && userToInactivate.isActive) {
       const activeAdminsInTenant = await this.prisma.user.count({
         where: {
           tenantId: requestingUserTenantId,
           role: { name: 'admin' },
           isActive: true,
-          id: { not: id }, // Exclui o usuário que está sendo inativado
+          id: { not: id },
         },
       });
       if (activeAdminsInTenant < 1) {
@@ -465,7 +451,6 @@ export class UsersService {
           `Tenant com ID ${targetTenantId} não encontrado.`,
         );
       }
-      // Validação NOVO: Permite apenas um admin ativo por tenant na CRIAÇÃO (por superadmin)
       if (targetRole.name === 'admin') {
         const existingAdmin = await this.prisma.user.findFirst({
           where: {
@@ -656,7 +641,6 @@ export class UsersService {
       updateData.password = await bcrypt.hash(updateUserDto.password, 10);
     }
 
-    // Declare targetRole outside the if block for scope, and initialize it.
     let targetRole: { name: string; isPlatformRole: boolean } | null = null;
 
     if (updateUserDto.roleId) {
@@ -670,15 +654,13 @@ export class UsersService {
         );
       }
 
-      // Validação NOVO: Permite apenas um admin ativo por tenant na ATUALIZAÇÃO (por superadmin)
-      // Aplica-se se o usuário que está sendo atualizado é de um tenant E a nova role é 'admin'
       if (userToUpdate.tenantId && targetRole.name === 'admin') {
         const existingAdminInTenant = await this.prisma.user.findFirst({
           where: {
-            tenantId: userToUpdate.tenantId, // O tenant do usuário que está sendo atualizado
+            tenantId: userToUpdate.tenantId,
             role: { name: 'admin' },
             isActive: true,
-            id: { not: id }, // Exclui o próprio usuário que está sendo atualizado
+            id: { not: id },
           },
         });
         if (existingAdminInTenant) {

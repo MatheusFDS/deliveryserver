@@ -6,6 +6,8 @@ import { JwtModule } from '@nestjs/jwt';
 import { JwtAuthGuard } from './jwt-auth.guard';
 import { PrismaModule } from '../prisma/prisma.module';
 import { AuthController } from './auth.controller';
+import { UsersModule } from '../users/users.module';
+import { TenantModule } from '../tenant/tenant.module';
 
 @Module({
   imports: [
@@ -15,9 +17,11 @@ import { AuthController } from './auth.controller';
       signOptions: { expiresIn: process.env.JWT_ACCESS_EXPIRATION },
     }),
     PrismaModule,
+    UsersModule,
+    TenantModule,
   ],
   providers: [AuthService, JwtStrategy, JwtAuthGuard],
   controllers: [AuthController],
-  exports: [AuthService],
+  exports: [AuthService, JwtAuthGuard],
 })
 export class AuthModule {}
