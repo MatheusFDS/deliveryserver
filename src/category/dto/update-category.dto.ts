@@ -2,5 +2,5 @@ import { PartialType } from '@nestjs/mapped-types';
 import { CreateCategoryDto } from './create-category.dto';
 
 export class UpdateCategoryDto extends PartialType(CreateCategoryDto) {
-  // Todas as validações são herdadas do CreateCategoryDto
+  // Esta classe herda de CreateCategoryDto, tornando todos os campos opcionais
 }

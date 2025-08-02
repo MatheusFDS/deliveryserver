@@ -1,38 +1,38 @@
 // Proposta para: src/delivery/dto/update-delivery.dto.ts (Backend)
 import { PartialType } from '@nestjs/mapped-types';
-import { CreateDeliveryDto, OrderReferenceDto } from './create-delivery.dto'; // Importar OrderReferenceDto
+import { CreateDeliveryDto, OrderReferenceDto } from './create-delivery.dto';
 import {
   IsOptional,
   IsString,
   IsArray,
   ValidateNested,
-  IsIn, // Para validar o status contra valores permitidos
+  IsIn,
+  ArrayMinSize, // Adicionar ArrayMinSize para o caso de `orders` ser atualizado
 } from 'class-validator';
 import { Type } from 'class-transformer';
-// Se OrderDto for realmente diferente de OrderReferenceDto e necessário aqui:
-// import { OrderDto } from '../../orders/dto/order.dto'; // Exemplo de caminho
-import { DeliveryStatus } from '../../types/status.enum'; // Importar o enum de status
+import { DeliveryStatus } from '../../types/status.enum';
 
-// Supondo que OrderDto para atualização seja o mesmo que OrderReferenceDto
-// Se for diferente, você precisará definir OrderDto e ajustar o @Type()
-// Por ora, vou usar OrderReferenceDto para consistência com a criação,
-// mas você pode alterar para OrderDto se for sua intenção.
 export class UpdateDeliveryDto extends PartialType(CreateDeliveryDto) {
-  // dataInicio?: string; // Já herdado como opcional de CreateDeliveryDto se adicionado lá
+  @IsOptional()
+  @IsString({ message: 'O status deve ser uma string.' })
+  @IsIn(
+    [
+      DeliveryStatus.A_LIBERAR,
+      DeliveryStatus.INICIADO,
+      DeliveryStatus.FINALIZADO,
+      DeliveryStatus.REJEITADO,
+    ],
+    { message: 'O status fornecido não é válido.' },
+  )
+  status?: string;
 
   @IsOptional()
-  @IsString()
-  @IsIn([
-    DeliveryStatus.A_LIBERAR,
-    DeliveryStatus.INICIADO,
-    DeliveryStatus.FINALIZADO,
-    DeliveryStatus.REJEITADO,
-  ]) // Validar contra os status permitidos
-  status?: string; // Manter como string, mas validar contra o enum
-
-  @IsOptional()
-  @IsArray()
+  @IsArray({ message: 'As ordens devem ser um array.' })
+  @ArrayMinSize(1, {
+    message:
+      'É necessário ter pelo menos um pedido na entrega se a lista for atualizada.',
+  }) // Garante que, se o array `orders` for enviado na atualização, ele não seja vazio.
   @ValidateNested({ each: true })
-  @Type(() => OrderReferenceDto) // Alterado para OrderReferenceDto para consistência ou defina OrderDto
-  orders?: OrderReferenceDto[]; // Ajustado para OrderReferenceDto ou use seu OrderDto
+  @Type(() => OrderReferenceDto)
+  orders?: OrderReferenceDto[];
 }
