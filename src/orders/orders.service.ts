@@ -303,7 +303,7 @@ export class OrdersService {
       });
 
       delivery.approvals.forEach((approval) => {
-        let eventTypeForOrderContext: OrderHistoryEventType | string = '';
+        let eventTypeForOrderContext: OrderHistoryEventType;
         let descriptionForOrderContext = '';
         let orderStatusAfterApprovalEvent = order.status;
 
@@ -322,8 +322,9 @@ export class OrdersService {
             orderStatusAfterApprovalEvent = OrderStatus.SEM_ROTA;
           }
         } else if (approval.action.toUpperCase() === 'RE_APPROVAL_NEEDED') {
+          // A linha abaixo foi corrigida para usar o novo membro do enum
           eventTypeForOrderContext =
-            'ROTEIRO_REQUER_NOVA_LIBERACAO_PARA_PEDIDO';
+            OrderHistoryEventType.ROTEIRO_REQUER_NOVA_LIBERACAO_PARA_PEDIDO;
           descriptionForOrderContext = `Alterações no roteiro ${delivery.id} (que inclui o pedido ${order.numero}) exigem nova liberação. Motivo: ${approval.motivo || 'Não especificado'}.`;
           if (order.status === OrderStatus.EM_ROTA) {
             orderStatusAfterApprovalEvent =

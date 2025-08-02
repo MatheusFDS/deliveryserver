@@ -8,13 +8,11 @@ import {
   IsDateString,
   IsUUID,
   MaxLength,
-  IsUrl, // Para proofUrl
+  IsUrl,
   ValidateNested,
-  IsIn, // Para details
+  IsIn,
 } from 'class-validator';
-import { Type } from 'class-transformer'; // Para ValidateNested
-
-// Re-importar o enum DeliveryStatus se for usado aqui para validação de status
+import { Type } from 'class-transformer';
 import { DeliveryStatus } from '../../types/status.enum';
 
 export enum OrderHistoryEventType {
@@ -34,6 +32,8 @@ export enum OrderHistoryEventType {
   ROTEIRO_LIBERADO = 'ROTEIRO_LIBERADO',
   ROTEIRO_REJEITADO = 'ROTEIRO_REJEITADO',
   ROTEIRO_FINALIZADO = 'ROTEIRO_FINALIZADO',
+  // NOVO: Adicionado para resolver o erro
+  ROTEIRO_REQUER_NOVA_LIBERACAO_PARA_PEDIDO = 'ROTEIRO_REQUER_NOVA_LIBERACAO_PARA_PEDIDO',
 }
 
 // Sub-DTO para os detalhes do evento
@@ -74,7 +74,7 @@ export class OrderHistoryEventDetailsDto {
   @IsUrl({}, { message: 'A URL do comprovante deve ser uma URL válida.' })
   @MaxLength(2048, {
     message: 'A URL do comprovante não pode ter mais de 2048 caracteres.',
-  }) // Limite comum para URLs
+  })
   proofUrl?: string;
 
   @IsOptional()
@@ -95,15 +95,13 @@ export class OrderHistoryEventDetailsDto {
   @MaxLength(10, {
     message: 'A placa do veículo não pode ter mais de 10 caracteres.',
   })
-  // Exemplo de regex para placa Mercosul (AAA0A00) ou antiga (AAA-0000)
-  // @Matches(/^[A-Z]{3}\d[A-Z]\d{2}$|^[A-Z]{3}-\d{4}$/, { message: 'A placa do veículo não é válida.' })
   vehiclePlate?: string;
 
   @IsOptional()
   @IsString({ message: 'O status da entrega deve ser uma string.' })
   @IsIn(Object.values(DeliveryStatus), {
     message: 'O status da entrega não é válido.',
-  }) // Valida contra o enum DeliveryStatus
+  })
   deliveryStatus?: string;
 
   @IsOptional()
@@ -133,7 +131,6 @@ export class OrderHistoryEventDetailsDto {
   @MaxLength(50, {
     message: 'O status final não pode ter mais de 50 caracteres.',
   })
-  // Se houver um enum para status final, use @IsIn
   finalStatus?: string;
 }
 
@@ -159,7 +156,7 @@ export class OrderHistoryEventDto {
       'O tipo de evento não é um tipo de evento de histórico de pedido válido.',
   })
   @IsNotEmpty({ message: 'O tipo de evento é obrigatório.' })
-  eventType: OrderHistoryEventType; // Alterado para OrderHistoryEventType, não string
+  eventType: OrderHistoryEventType;
 
   @IsString({ message: 'A descrição deve ser uma string.' })
   @IsNotEmpty({ message: 'A descrição é obrigatória.' })
@@ -170,12 +167,11 @@ export class OrderHistoryEventDto {
 
   @IsOptional()
   @IsString({ message: 'O usuário deve ser uma string.' })
-  @MaxLength(100, { message: 'O usuário não pode ter mais de 100 caracteres.' }) // Se for nome/email do usuário
-  // Ou @IsUUID('4', { message: 'O ID do usuário deve ser um UUID válido (versão 4).' }) se for um ID de usuário
+  @MaxLength(100, { message: 'O usuário não pode ter mais de 100 caracteres.' })
   user?: string;
 
   @IsOptional()
   @ValidateNested()
-  @Type(() => OrderHistoryEventDetailsDto) // Garante que os detalhes são um objeto validado
+  @Type(() => OrderHistoryEventDetailsDto)
   details?: OrderHistoryEventDetailsDto;
 }
