@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { JwtStrategy } from './jwt.strategy';
 import { PassportModule } from '@nestjs/passport';
@@ -17,8 +17,8 @@ import { TenantModule } from '../tenant/tenant.module';
       signOptions: { expiresIn: process.env.JWT_ACCESS_EXPIRATION },
     }),
     PrismaModule,
-    UsersModule,
-    TenantModule,
+    forwardRef(() => UsersModule), // Correção: Use forwardRef aqui também
+    forwardRef(() => TenantModule), // Correção: Use forwardRef aqui também
   ],
   providers: [AuthService, JwtStrategy, JwtAuthGuard],
   controllers: [AuthController],

@@ -1,11 +1,17 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { OrdersService } from './orders.service';
 import { OrdersController } from './orders.controller';
 import { PrismaService } from '../prisma/prisma.service';
-import { AuthModule } from '../auth/auth.module'; // Importe o AuthModule
+import { AuthModule } from '../auth/auth.module';
+import { UsersModule } from '../users/users.module'; // Adicionado
+import { TenantModule } from '../tenant/tenant.module'; // Adicionado
 
 @Module({
-  imports: [AuthModule], // Adicione o AuthModule aos imports
+  imports: [
+    forwardRef(() => AuthModule),
+    forwardRef(() => UsersModule), // Adicionado
+    forwardRef(() => TenantModule), // Adicionado
+  ],
   controllers: [OrdersController],
   providers: [OrdersService, PrismaService],
 })
