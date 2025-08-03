@@ -25,7 +25,6 @@ async function bootstrap() {
       if (allowedOrigins.includes(origin)) {
         callback(null, true);
       } else {
-        console.warn(`🚨 CORS bloqueado para: ${origin}`);
         callback(new Error('Origin não autorizada pelo CORS'));
       }
     },
@@ -47,7 +46,6 @@ async function bootstrap() {
   app.useGlobalFilters(new HttpExceptionFilter(), new AllExceptionsFilter());
 
   await app.listen(port, '0.0.0.0');
-  console.log(`🚀 Servidor rodando em http://localhost:${port}`);
 }
 
 bootstrap();

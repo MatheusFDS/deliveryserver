@@ -4,10 +4,12 @@ import {
   UnauthorizedException,
   BadRequestException,
   ConflictException,
+  InternalServerErrorException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateVehicleDto } from './dto/create-vehicle.dto';
 import { UpdateVehicleDto } from './dto/update-vehicle.dto';
+import { Prisma } from '@prisma/client';
 
 @Injectable()
 export class VehiclesService {
@@ -46,7 +48,6 @@ export class VehiclesService {
     }
 
     try {
-      // <-- Try começa mais cedo
       // Validação de unicidade para 'model' dentro do tenant
       const existingModel = await this.prisma.vehicle.findFirst({
         where: { model: createVehicleDto.model, tenantId },
@@ -64,26 +65,85 @@ export class VehiclesService {
         },
       });
     } catch (error: any) {
-      console.log('VehiclesService - Erro capturado no create:', error.code);
-      if (error.code === 'P2002' && error.meta?.target?.includes('plate')) {
-        console.log(
-          'VehiclesService - Lançando ConflictException para placa duplicada.',
-        );
-        throw new ConflictException(
-          `Já existe um veículo com a placa "${createVehicleDto.plate}" nesta empresa.`,
-        );
+      if (error instanceof Prisma.PrismaClientKnownRequestError) {
+        if (error.code === 'P2002') {
+          // Unique constraint failed on `plate`
+          if (
+            error.meta?.target &&
+            Array.isArray(error.meta.target) &&
+            error.meta.target.includes('plate')
+          ) {
+            throw new ConflictException(
+              `Já existe um veículo com a placa "${createVehicleDto.plate}" nesta empresa.`,
+            );
+          }
+        }
       }
-      if (error instanceof ConflictException) {
-        // Re-lança a exceção de conflito de modelo
-        throw error;
+      if (
+        error instanceof ConflictException ||
+        error instanceof BadRequestException
+      ) {
+        throw error; // Re-lança exceções já tratadas
       }
-      throw new BadRequestException('Erro ao criar veículo.');
+      throw new InternalServerErrorException('Erro ao criar veículo.'); // Generic error for unexpected issues
     }
   }
 
-  async findAllByUserId(userId: string) {
+  async findAllByUserId(
+    userId: string,
+    search?: string,
+    page: number = 1,
+    pageSize: number = 10,
+  ) {
     const tenantId = await this.getTenantIdFromUserId(userId);
-    return this.prisma.vehicle.findMany({ where: { tenantId } });
+
+    const skip = (page - 1) * pageSize;
+    const take = pageSize;
+
+    const where: Prisma.VehicleWhereInput = {
+      tenantId,
+    };
+
+    if (search) {
+      where.OR = [
+        { model: { contains: search, mode: 'insensitive' } },
+        { plate: { contains: search, mode: 'insensitive' } },
+        // Use 'Driver' and 'Category' as per your schema.prisma
+        { Driver: { is: { name: { contains: search, mode: 'insensitive' } } } },
+        {
+          Category: { is: { name: { contains: search, mode: 'insensitive' } } },
+        },
+      ];
+    }
+
+    const [vehicles, total] = await this.prisma.$transaction([
+      this.prisma.vehicle.findMany({
+        where,
+        skip,
+        take,
+        include: {
+          // Use 'Driver' and 'Category' as per your schema.prisma
+          Driver: {
+            select: { name: true },
+          },
+          Category: {
+            select: { name: true },
+          },
+        },
+        orderBy: {
+          createdAt: 'desc',
+        },
+      }),
+      this.prisma.vehicle.count({ where }),
+    ]);
+
+    return {
+      data: vehicles,
+      total,
+      page,
+      pageSize,
+      lastPage: Math.ceil(total / pageSize),
+    };
   }
 
   async findOneByIdAndUserId(id: string, userId: string) {
@@ -134,14 +194,17 @@ export class VehiclesService {
     }
 
     try {
-      // <-- Try começa mais cedo
       // Validação de unicidade para 'model' se estiver sendo atualizado
       if (
         updateVehicleDto.model &&
-        updateVehicleDto.model !== existingVehicle.model
+        updateVehicleDto.model.trim() !== existingVehicle.model
       ) {
         const existingModel = await this.prisma.vehicle.findFirst({
-          where: { model: updateVehicleDto.model, tenantId, id: { not: id } },
+          where: {
+            model: updateVehicleDto.model.trim(),
+            tenantId,
+            id: { not: id },
+          },
         });
         if (existingModel) {
           throw new ConflictException(
@@ -155,22 +218,33 @@ export class VehiclesService {
         data: updateVehicleDto,
       });
     } catch (error: any) {
-      console.log('VehiclesService - Erro capturado no update:', error.code);
-      if (error.code === 'P2002' && error.meta?.target?.includes('plate')) {
-        throw new ConflictException(
-          `Já existe outro veículo com a placa "${updateVehicleDto.plate}" nesta empresa.`,
-        );
+      if (error instanceof Prisma.PrismaClientKnownRequestError) {
+        if (error.code === 'P2002') {
+          // Unique constraint failed on `plate`
+          if (
+            error.meta?.target &&
+            Array.isArray(error.meta.target) &&
+            error.meta.target.includes('plate')
+          ) {
+            throw new ConflictException(
+              `Já existe outro veículo com a placa "${updateVehicleDto.plate}" nesta empresa.`,
+            );
+          }
+        }
       }
-      if (error instanceof ConflictException) {
-        throw error;
+      if (
+        error instanceof ConflictException ||
+        error instanceof BadRequestException ||
+        error instanceof NotFoundException
+      ) {
+        throw error; // Re-lança exceções já tratadas
       }
-      throw new BadRequestException('Erro ao atualizar veículo.');
+      throw new InternalServerErrorException('Erro ao atualizar veículo.'); // Generic error for unexpected issues
     }
   }
 
   async remove(id: string, userId: string) {
     try {
-      // <-- Try começa mais cedo aqui
       const tenantId = await this.getTenantIdFromUserId(userId);
 
       const existingVehicle = await this.prisma.vehicle.findFirst({
@@ -182,25 +256,23 @@ export class VehiclesService {
         );
       }
 
-      return this.prisma.vehicle.delete({ where: { id } });
+      return await this.prisma.vehicle.delete({ where: { id } });
     } catch (error: any) {
-      console.log('VehiclesService - Erro capturado no remove:', error.code);
-      if (error.code === 'P2003' || error.code === 'P2014') {
-        console.log(
-          'VehiclesService - Lançando BadRequestException para chave estrangeira.',
-        );
-        throw new BadRequestException(
-          'Não é possível excluir este veículo. Ele possui registros relacionados (ex: entregas, pedidos).',
-        );
+      if (error instanceof Prisma.PrismaClientKnownRequestError) {
+        if (error.code === 'P2003' || error.code === 'P2014') {
+          // Foreign key constraint failed or record required for a foreign key constraint
+          throw new BadRequestException(
+            'Não é possível excluir este veículo. Ele possui registros relacionados (ex: entregas, pedidos).',
+          );
+        }
       }
-      // Se não for um P2003/P2014, verificar se já é uma HttpException (NotFoundException)
-      if (error instanceof NotFoundException) {
-        throw error; // Re-lança NotFoundException
+      if (
+        error instanceof NotFoundException ||
+        error instanceof BadRequestException
+      ) {
+        throw error; // Re-lança exceções já tratadas
       }
-      console.log(
-        'VehiclesService - Lançando BadRequestException genérico no remove.',
-      );
-      throw new BadRequestException('Erro ao excluir veículo.');
+      throw new InternalServerErrorException('Erro ao excluir veículo.'); // Generic error for unexpected issues
     }
   }
 }
