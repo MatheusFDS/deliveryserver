@@ -168,15 +168,9 @@ export class TenantService {
     updateTenantDto: UpdateTenantDto,
     requestingUserId: string,
   ) {
-    console.log('--- Início da Depuração updateTenantByPlatformAdmin ---');
-    console.log('TenantId recebido:', tenantId);
-    console.log('UpdateTenantDto recebido:', updateTenantDto);
-    console.log('RequestingUserId recebido:', requestingUserId);
-
     const requestingUser =
       await this.getRequestingUserWithRole(requestingUserId);
     if (requestingUser.role.name !== 'superadmin') {
-      console.log('ERRO: Role do usuário solicitante não é superadmin.');
       throw new ForbiddenException(
         'Apenas superadministradores podem atualizar tenants.',
       );
@@ -187,14 +181,8 @@ export class TenantService {
         where: { id: tenantId },
         data: updateTenantDto,
       });
-      console.log(
-        'Tenant atualizado com sucesso no banco de dados:',
-        updatedTenant,
-      );
-      console.log('--- Fim da Depuração updateTenantByPlatformAdmin ---');
       return updatedTenant;
     } catch (error: any) {
-      console.error('ERRO ao atualizar tenant no banco de dados:', error);
       if (error.code === 'P2025') {
         throw new NotFoundException(
           `Tenant com ID ${tenantId} não encontrado.`,
