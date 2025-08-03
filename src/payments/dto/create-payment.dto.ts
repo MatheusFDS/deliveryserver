@@ -40,10 +40,6 @@ export class CreatePaymentDto {
   }) // Valida contra os status permitidos no enum
   status: string;
 
-  @IsUUID('4', {
-    message: 'O ID do tenant deve ser um UUID válido (versão 4).',
-  })
-  @IsNotEmpty({ message: 'O ID do tenant é obrigatório.' })
   tenantId: string;
 
   @IsUUID('4', {

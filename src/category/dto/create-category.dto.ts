@@ -4,8 +4,7 @@ import {
   MaxLength,
   IsNumber,
   Min,
-  Max, // Importar Max
-  IsUUID,
+  Max,
   IsPositive,
 } from 'class-validator';
 
@@ -28,9 +27,5 @@ export class CreateCategoryDto {
   }) // Adicionada validação para 7 dígitos
   valor: number;
 
-  @IsUUID('4', {
-    message: 'O ID do tenant deve ser um UUID válido (versão 4).',
-  })
-  @IsNotEmpty({ message: 'O ID do tenant não pode estar vazio.' })
   tenantId: string;
 }
