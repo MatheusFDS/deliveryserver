@@ -2,6 +2,7 @@ import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
 import { CorsOptions } from '@nestjs/common/interfaces/external/cors-options.interface';
+import { HttpExceptionFilter } from './common/filters/http-exception.filter'; // Importe o filtro
 
 const port = process.env.PORT || 4000;
 
@@ -16,7 +17,6 @@ async function bootstrap() {
 
   const corsOptions: CorsOptions = {
     origin: (origin, callback) => {
-      // Permite requisições sem origem (ex: Postman)
       if (!origin) return callback(null, true);
 
       if (allowedOrigins.includes(origin)) {
@@ -32,7 +32,17 @@ async function bootstrap() {
   };
 
   app.enableCors(corsOptions);
-  app.useGlobalPipes(new ValidationPipe({ whitelist: true }));
+
+  app.useGlobalPipes(
+    new ValidationPipe({
+      whitelist: true,
+      forbidNonWhitelisted: true,
+      transform: true,
+    }),
+  );
+
+  // Registra o filtro de exceções globalmente
+  app.useGlobalFilters(new HttpExceptionFilter());
 
   await app.listen(port, '0.0.0.0');
   console.log(`🚀 Servidor rodando em http://localhost:${port}`);
