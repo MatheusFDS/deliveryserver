@@ -3,6 +3,7 @@ import {
   NotFoundException,
   UnauthorizedException,
   BadRequestException,
+  ConflictException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateVehicleDto } from './dto/create-vehicle.dto';
@@ -44,13 +45,21 @@ export class VehiclesService {
       );
     }
 
-    // Incluir cubagem e pesoMaximo nos dados de criação
-    return this.prisma.vehicle.create({
-      data: {
-        ...createVehicleDto,
-        tenantId: tenantId,
-      },
-    });
+    try {
+      return this.prisma.vehicle.create({
+        data: {
+          ...createVehicleDto,
+          tenantId: tenantId,
+        },
+      });
+    } catch (error: any) {
+      if (error.code === 'P2002' && error.meta?.target?.includes('plate')) {
+        throw new ConflictException(
+          `Já existe um veículo com a placa "${createVehicleDto.plate}" nesta empresa.`,
+        );
+      }
+      throw new BadRequestException('Erro ao criar veículo.');
+    }
   }
 
   async findAllByUserId(userId: string) {
@@ -105,11 +114,19 @@ export class VehiclesService {
       }
     }
 
-    // Passa updateVehicleDto diretamente para data, incluindo cubagem e pesoMaximo
-    return this.prisma.vehicle.update({
-      where: { id },
-      data: updateVehicleDto,
-    });
+    try {
+      return this.prisma.vehicle.update({
+        where: { id },
+        data: updateVehicleDto,
+      });
+    } catch (error: any) {
+      if (error.code === 'P2002' && error.meta?.target?.includes('plate')) {
+        throw new ConflictException(
+          `Já existe outro veículo com a placa "${updateVehicleDto.plate}" nesta empresa.`,
+        );
+      }
+      throw new BadRequestException('Erro ao atualizar veículo.');
+    }
   }
 
   async remove(id: string, userId: string) {
@@ -124,6 +141,15 @@ export class VehiclesService {
       );
     }
 
-    return this.prisma.vehicle.delete({ where: { id } });
+    try {
+      return this.prisma.vehicle.delete({ where: { id } });
+    } catch (error: any) {
+      if (error.code === 'P2003' || error.code === 'P2014') {
+        throw new BadRequestException(
+          'Não é possível excluir este veículo. Ele possui registros relacionados (ex: entregas, pedidos).',
+        );
+      }
+      throw new BadRequestException('Erro ao excluir veículo.');
+    }
   }
 }
