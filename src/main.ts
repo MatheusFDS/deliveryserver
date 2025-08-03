@@ -7,7 +7,7 @@ import {
   AllExceptionsFilter,
   HttpExceptionFilter,
 } from './common/filters/http-exception.filter';
-import { PrismaExceptionFilter } from './common/filters/prisma-exception.filter'; // Certifique-se de que o caminho está correto
+import { PrismaExceptionFilter } from './common/filters/prisma-exception.filter'; // Certifique-se de que o caminho está correto!
 
 const port = process.env.PORT || 4000;
 
@@ -45,12 +45,8 @@ async function bootstrap() {
     }),
   );
 
-  // Ordem crucial para tratamento de exceções:
-  // 1. PrismaExceptionFilter: Captura erros do Prisma primeiro para dar mensagens específicas.
-  // 2. HttpExceptionFilter: Captura HttpExceptions (BadRequest, Conflict, NotFound, etc.) lançadas manualmente.
-  // 3. AllExceptionsFilter: Captura qualquer outra exceção não tratada como um fallback genérico.
   app.useGlobalFilters(
-    new PrismaExceptionFilter(), // Adicione ou mova este para ser o primeiro para erros específicos do DB
+    new PrismaExceptionFilter(),
     new HttpExceptionFilter(),
     new AllExceptionsFilter(),
   );

@@ -76,8 +76,13 @@ export class VehiclesService {
       if (
         error instanceof ConflictException ||
         error instanceof BadRequestException ||
-        error instanceof UnauthorizedException
+        error instanceof UnauthorizedException ||
+        error instanceof NotFoundException
       ) {
+        throw error;
+      }
+
+      if (error instanceof Prisma.PrismaClientKnownRequestError) {
         throw error;
       }
 
@@ -242,6 +247,10 @@ export class VehiclesService {
         throw error;
       }
 
+      if (error instanceof Prisma.PrismaClientKnownRequestError) {
+        throw error;
+      }
+
       console.error('Erro inesperado ao atualizar veículo:', error);
       throw new InternalServerErrorException(
         'Erro inesperado ao atualizar veículo. Por favor, tente novamente mais tarde.',
@@ -269,6 +278,10 @@ export class VehiclesService {
         error instanceof BadRequestException ||
         error instanceof UnauthorizedException
       ) {
+        throw error;
+      }
+
+      if (error instanceof Prisma.PrismaClientKnownRequestError) {
         throw error;
       }
 
