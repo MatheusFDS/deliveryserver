@@ -8,6 +8,9 @@ import {
   Delete,
   UseGuards,
   Req,
+  Query,
+  ParseIntPipe,
+  DefaultValuePipe,
 } from '@nestjs/common';
 import { CategoryService } from './category.service';
 import { CreateCategoryDto } from './dto/create-category.dto';
@@ -27,9 +30,21 @@ export class CategoryController {
   }
 
   @Get()
-  async findAll(@Req() req) {
+  async findAll(
+    @Req() req,
+    @Query('search') search?: string,
+    @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number = 1,
+    @Query('pageSize', new DefaultValuePipe(10), ParseIntPipe)
+    pageSize: number = 10,
+  ) {
     const userId = req.user.userId;
-    return this.categoryService.findAllByUserId(userId);
+    return this.categoryService.findAllByUserId(userId, search, page, pageSize);
+  }
+
+  @Get('all')
+  async findAllTenantCategories(@Req() req) {
+    const userId = req.user.userId;
+    return this.categoryService.findAllByTenant(userId);
   }
 
   @Get(':id')

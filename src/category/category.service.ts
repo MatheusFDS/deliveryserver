@@ -29,66 +29,79 @@ export class CategoryService {
   async create(createCategoryDto: CreateCategoryDto, userId: string) {
     const tenantId = await this.getTenantIdFromUserId(userId);
 
-    if (!createCategoryDto.name || createCategoryDto.valor === undefined) {
-      throw new BadRequestException(
-        'Nome e valor da categoria são obrigatórios.',
-      );
-    }
-
-    const existingCategoryWithName = await this.prisma.category.findFirst({
+    const existingCategory = await this.prisma.category.findFirst({
       where: {
         name: { equals: createCategoryDto.name, mode: 'insensitive' },
         tenantId,
       },
     });
 
-    if (existingCategoryWithName) {
+    if (existingCategory) {
       throw new ConflictException(
         `Já existe uma categoria com o nome "${createCategoryDto.name}" nesta empresa.`,
       );
     }
 
     try {
-      return this.prisma.category.create({
+      return await this.prisma.category.create({
         data: {
           ...createCategoryDto,
-          tenantId: tenantId,
+          tenantId,
         },
       });
-    } catch (error: any) {
+    } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError) {
-        if (error.code === 'P2002') {
-          if (
-            error.meta?.target &&
-            Array.isArray(error.meta.target) &&
-            error.meta.target.includes('name')
-          ) {
-            throw new ConflictException(
-              `Já existe uma categoria com o nome "${createCategoryDto.name}" nesta empresa.`,
-            );
-          }
-        }
-      }
-
-      if (
-        error instanceof ConflictException ||
-        error instanceof BadRequestException
-      ) {
         throw error;
       }
-
-      console.error('Erro inesperado ao criar categoria:', error);
       throw new InternalServerErrorException(
-        'Erro ao criar categoria. Por favor, tente novamente mais tarde.',
+        'Erro inesperado ao criar a categoria.',
       );
     }
   }
 
-  async findAllByUserId(userId: string) {
+  async findAllByUserId(
+    userId: string,
+    search?: string,
+    page: number = 1,
+    pageSize: number = 10,
+  ) {
     const tenantId = await this.getTenantIdFromUserId(userId);
-    return this.prisma.category.findMany({
-      where: { tenantId },
-    });
+    const skip = (page - 1) * pageSize;
+    const take = pageSize;
+
+    const where: Prisma.CategoryWhereInput = {
+      tenantId,
+    };
+
+    if (search) {
+      where.OR = [{ name: { contains: search, mode: 'insensitive' } }];
+    }
+
+    try {
+      const [categories, total] = await this.prisma.$transaction([
+        this.prisma.category.findMany({
+          where,
+          skip,
+          take,
+          orderBy: {
+            createdAt: 'desc',
+          },
+        }),
+        this.prisma.category.count({ where }),
+      ]);
+
+      return {
+        data: categories,
+        total,
+        page,
+        pageSize,
+        lastPage: Math.ceil(total / pageSize),
+      };
+    } catch (error) {
+      throw new InternalServerErrorException(
+        'Erro inesperado ao buscar as categorias.',
+      );
+    }
   }
 
   async findOneByIdAndUserId(id: string, userId: string) {
@@ -96,9 +109,10 @@ export class CategoryService {
     const category = await this.prisma.category.findFirst({
       where: { id, tenantId },
     });
+
     if (!category) {
       throw new NotFoundException(
-        'Categoria não encontrada ou não pertence ao seu tenant.',
+        'Categoria não encontrada ou não pertence à sua empresa.',
       );
     }
     return category;
@@ -110,20 +124,20 @@ export class CategoryService {
     userId: string,
   ) {
     const tenantId = await this.getTenantIdFromUserId(userId);
-
-    const existingCategory = await this.prisma.category.findFirst({
+    const categoryToUpdate = await this.prisma.category.findFirst({
       where: { id, tenantId },
     });
-    if (!existingCategory) {
+
+    if (!categoryToUpdate) {
       throw new NotFoundException(
-        'Categoria não encontrada ou não pertence ao seu tenant.',
+        'Categoria não encontrada ou não pertence à sua empresa.',
       );
     }
 
     if (
       updateCategoryDto.name &&
       updateCategoryDto.name.trim().toLowerCase() !==
-        existingCategory.name.trim().toLowerCase()
+        categoryToUpdate.name.trim().toLowerCase()
     ) {
       const existingCategoryWithSameName = await this.prisma.category.findFirst(
         {
@@ -139,90 +153,73 @@ export class CategoryService {
       );
       if (existingCategoryWithSameName) {
         throw new ConflictException(
-          `Já existe outra categoria com o nome "${updateCategoryDto.name}" nesta empresa.`,
+          `Já existe outra categoria com o nome "${updateCategoryDto.name}".`,
         );
       }
     }
 
     try {
-      return this.prisma.category.update({
+      return await this.prisma.category.update({
         where: { id },
         data: updateCategoryDto,
       });
-    } catch (error: any) {
+    } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError) {
-        if (error.code === 'P2002') {
-          if (
-            error.meta?.target &&
-            Array.isArray(error.meta.target) &&
-            error.meta.target.includes('name')
-          ) {
-            throw new ConflictException(
-              `Já existe outra categoria com o nome "${updateCategoryDto.name}" nesta empresa.`,
-            );
-          }
-        }
-      }
-
-      if (
-        error instanceof ConflictException ||
-        error instanceof BadRequestException ||
-        error instanceof NotFoundException
-      ) {
         throw error;
       }
-
-      console.error('Erro inesperado ao atualizar categoria:', error);
       throw new InternalServerErrorException(
-        'Erro ao atualizar categoria. Por favor, tente novamente mais tarde.',
+        'Erro inesperado ao atualizar a categoria.',
       );
     }
   }
 
   async remove(id: string, userId: string) {
+    const tenantId = await this.getTenantIdFromUserId(userId);
+    const categoryToRemove = await this.prisma.category.findFirst({
+      where: { id, tenantId },
+    });
+
+    if (!categoryToRemove) {
+      throw new NotFoundException(
+        'Categoria não encontrada ou não pertence à sua empresa.',
+      );
+    }
+
+    const relatedVehiclesCount = await this.prisma.vehicle.count({
+      where: { categoryId: id, tenantId },
+    });
+
+    if (relatedVehiclesCount > 0) {
+      throw new BadRequestException(
+        'Não é possível excluir esta categoria, pois existem veículos associados a ela.',
+      );
+    }
+
     try {
-      const tenantId = await this.getTenantIdFromUserId(userId);
-
-      const existingCategory = await this.prisma.category.findFirst({
-        where: { id, tenantId },
-      });
-      if (!existingCategory) {
-        throw new NotFoundException(
-          'Categoria não encontrada ou não pertence ao seu tenant.',
-        );
-      }
-
-      // Check for related records (e.g., vehicles) before deleting
-      const relatedVehicles = await this.prisma.vehicle.count({
-        where: { categoryId: id, tenantId },
-      });
-
-      if (relatedVehicles > 0) {
-        throw new BadRequestException(
-          'Não é possível excluir esta categoria. Existem veículos associados a ela.',
-        );
-      }
-
-      return await this.prisma.category.delete({ where: { id } });
-    } catch (error: any) {
+      await this.prisma.category.delete({ where: { id } });
+      return { message: 'Categoria excluída com sucesso.' };
+    } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError) {
-        if (error.code === 'P2003' || error.code === 'P2014') {
-          throw new BadRequestException(
-            'Não é possível excluir esta categoria. Ela possui registros relacionados.',
-          );
-        }
-      }
-
-      if (
-        error instanceof NotFoundException ||
-        error instanceof BadRequestException
-      ) {
         throw error;
       }
-
-      console.error('Erro inesperado ao excluir categoria:', error);
       throw new InternalServerErrorException(
-        'Erro ao excluir categoria. Por favor, tente novamente mais tarde.',
+        'Erro inesperado ao excluir a categoria.',
+      );
+    }
+  }
+
+  async findAllByTenant(userId: string) {
+    const tenantId = await this.getTenantIdFromUserId(userId);
+    try {
+      return await this.prisma.category.findMany({
+        where: { tenantId },
+        orderBy: {
+          name: 'asc',
+        },
+      });
+    } catch (error) {
+      throw new InternalServerErrorException(
+        'Erro inesperado ao buscar as categorias.',
       );
     }
   }
