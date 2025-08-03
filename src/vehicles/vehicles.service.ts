@@ -73,33 +73,17 @@ export class VehiclesService {
         },
       });
     } catch (error: any) {
-      if (error instanceof Prisma.PrismaClientKnownRequestError) {
-        if (error.code === 'P2002') {
-          if (error.meta?.target && Array.isArray(error.meta.target)) {
-            if (error.meta.target.includes('plate')) {
-              throw new ConflictException(
-                `Já existe um veículo com a placa "${createVehicleDto.plate}" nesta empresa.`,
-              );
-            }
-            if (error.meta.target.includes('model')) {
-              throw new ConflictException(
-                `Já existe um veículo com o modelo "${createVehicleDto.model}" nesta empresa.`,
-              );
-            }
-          }
-        }
-      }
-
       if (
         error instanceof ConflictException ||
-        error instanceof BadRequestException
+        error instanceof BadRequestException ||
+        error instanceof UnauthorizedException
       ) {
         throw error;
       }
 
       console.error('Erro inesperado ao criar veículo:', error);
       throw new InternalServerErrorException(
-        'Erro ao criar veículo. Por favor, tente novamente mais tarde.',
+        'Erro inesperado ao criar veículo. Por favor, tente novamente mais tarde.',
       );
     }
   }
@@ -249,34 +233,18 @@ export class VehiclesService {
         data: updateVehicleDto,
       });
     } catch (error: any) {
-      if (error instanceof Prisma.PrismaClientKnownRequestError) {
-        if (error.code === 'P2002') {
-          if (error.meta?.target && Array.isArray(error.meta.target)) {
-            if (error.meta.target.includes('plate')) {
-              throw new ConflictException(
-                `Já existe outro veículo com a placa "${updateVehicleDto.plate}" nesta empresa.`,
-              );
-            }
-            if (error.meta.target.includes('model')) {
-              throw new ConflictException(
-                `Já existe outro veículo com o modelo "${updateVehicleDto.model}" nesta empresa.`,
-              );
-            }
-          }
-        }
-      }
-
       if (
         error instanceof ConflictException ||
         error instanceof BadRequestException ||
-        error instanceof NotFoundException
+        error instanceof NotFoundException ||
+        error instanceof UnauthorizedException
       ) {
         throw error;
       }
 
       console.error('Erro inesperado ao atualizar veículo:', error);
       throw new InternalServerErrorException(
-        'Erro ao atualizar veículo. Por favor, tente novamente mais tarde.',
+        'Erro inesperado ao atualizar veículo. Por favor, tente novamente mais tarde.',
       );
     }
   }
@@ -296,17 +264,10 @@ export class VehiclesService {
 
       return await this.prisma.vehicle.delete({ where: { id } });
     } catch (error: any) {
-      if (error instanceof Prisma.PrismaClientKnownRequestError) {
-        if (error.code === 'P2003' || error.code === 'P2014') {
-          throw new BadRequestException(
-            'Não é possível excluir este veículo. Ele possui registros relacionados (ex: entregas, pedidos).',
-          );
-        }
-      }
-
       if (
         error instanceof NotFoundException ||
-        error instanceof BadRequestException
+        error instanceof BadRequestException ||
+        error instanceof UnauthorizedException
       ) {
         throw error;
       }

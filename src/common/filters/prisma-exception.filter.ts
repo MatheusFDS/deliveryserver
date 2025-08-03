@@ -65,6 +65,7 @@ export class PrismaExceptionFilter implements ExceptionFilter {
         message = 'Registro não encontrado para a operação solicitada.';
         break;
       default:
+        // Para outros erros não explicitamente mapeados
         status = HttpStatus.INTERNAL_SERVER_ERROR;
         message =
           'Ocorreu um erro inesperado no banco de dados. Por favor, tente novamente mais tarde.';
