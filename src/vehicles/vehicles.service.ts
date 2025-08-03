@@ -4,12 +4,12 @@ import {
   UnauthorizedException,
   BadRequestException,
   ConflictException,
-  InternalServerErrorException, // Keep InternalServerErrorException for true server errors
+  InternalServerErrorException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateVehicleDto } from './dto/create-vehicle.dto';
 import { UpdateVehicleDto } from './dto/update-vehicle.dto';
-import { Prisma } from '@prisma/client'; // Import Prisma
+import { Prisma } from '@prisma/client';
 
 @Injectable()
 export class VehiclesService {
@@ -47,14 +47,21 @@ export class VehiclesService {
       );
     }
 
-    // OTIMIZAÇÃO: Antecipar o erro de placa duplicada
-    // Mantenha esta checagem para feedback rápido antes mesmo de ir para o banco
     const existingVehicleWithSamePlate = await this.prisma.vehicle.findFirst({
       where: { plate: createVehicleDto.plate, tenantId },
     });
     if (existingVehicleWithSamePlate) {
       throw new ConflictException(
         `Já existe um veículo com a placa "${createVehicleDto.plate}" nesta empresa.`,
+      );
+    }
+
+    const existingVehicleWithSameModel = await this.prisma.vehicle.findFirst({
+      where: { model: createVehicleDto.model, tenantId },
+    });
+    if (existingVehicleWithSameModel) {
+      throw new ConflictException(
+        `Já existe um veículo com o modelo "${createVehicleDto.model}" nesta empresa.`,
       );
     }
 
@@ -66,10 +73,8 @@ export class VehiclesService {
         },
       });
     } catch (error: any) {
-      // Reintroduz o tratamento do erro P2002 no catch como fallback para concorrência
       if (error instanceof Prisma.PrismaClientKnownRequestError) {
         if (error.code === 'P2002') {
-          // Unique constraint failed
           if (error.meta?.target && Array.isArray(error.meta.target)) {
             if (error.meta.target.includes('plate')) {
               throw new ConflictException(
@@ -77,7 +82,6 @@ export class VehiclesService {
               );
             }
             if (error.meta.target.includes('model')) {
-              // Assuming model is also unique in schema
               throw new ConflictException(
                 `Já existe um veículo com o modelo "${createVehicleDto.model}" nesta empresa.`,
               );
@@ -86,8 +90,6 @@ export class VehiclesService {
         }
       }
 
-      // Se o erro já é uma exceção HTTP que tratamos (ex: ConflictException, BadRequestException, NotFoundException)
-      // re-lança-a diretamente. Isso é importante para não "reembrulhar" um erro já específico.
       if (
         error instanceof ConflictException ||
         error instanceof BadRequestException
@@ -95,7 +97,6 @@ export class VehiclesService {
         throw error;
       }
 
-      // Para qualquer outro erro não antecipado ou não específico do Prisma, logue e lance um erro genérico
       console.error('Erro inesperado ao criar veículo:', error);
       throw new InternalServerErrorException(
         'Erro ao criar veículo. Por favor, tente novamente mais tarde.',
@@ -105,6 +106,7 @@ export class VehiclesService {
 
   async findAllByUserId(
     userId: string,
+    search?: string,
     page: number = 1,
     pageSize: number = 10,
   ) {
@@ -116,6 +118,17 @@ export class VehiclesService {
     const where: Prisma.VehicleWhereInput = {
       tenantId,
     };
+
+    if (search) {
+      where.OR = [
+        { model: { contains: search, mode: 'insensitive' } },
+        { plate: { contains: search, mode: 'insensitive' } },
+        { Driver: { is: { name: { contains: search, mode: 'insensitive' } } } },
+        {
+          Category: { is: { name: { contains: search, mode: 'insensitive' } } },
+        },
+      ];
+    }
 
     const [vehicles, total] = await this.prisma.$transaction([
       this.prisma.vehicle.findMany({
@@ -193,7 +206,6 @@ export class VehiclesService {
       }
     }
 
-    // OTIMIZAÇÃO: Antecipar o erro de placa duplicada na atualização
     if (
       updateVehicleDto.plate &&
       updateVehicleDto.plate.trim().toUpperCase() !==
@@ -213,7 +225,6 @@ export class VehiclesService {
       }
     }
 
-    // OTIMIZAÇÃO: Antecipar o erro de modelo duplicado na atualização
     if (
       updateVehicleDto.model &&
       updateVehicleDto.model.trim() !== existingVehicle.model
@@ -238,10 +249,8 @@ export class VehiclesService {
         data: updateVehicleDto,
       });
     } catch (error: any) {
-      // Reintroduz o tratamento do erro P2002 no catch como fallback para concorrência
       if (error instanceof Prisma.PrismaClientKnownRequestError) {
         if (error.code === 'P2002') {
-          // Unique constraint failed
           if (error.meta?.target && Array.isArray(error.meta.target)) {
             if (error.meta.target.includes('plate')) {
               throw new ConflictException(
@@ -249,7 +258,6 @@ export class VehiclesService {
               );
             }
             if (error.meta.target.includes('model')) {
-              // Assuming model is also unique in schema
               throw new ConflictException(
                 `Já existe outro veículo com o modelo "${updateVehicleDto.model}" nesta empresa.`,
               );
@@ -258,7 +266,6 @@ export class VehiclesService {
         }
       }
 
-      // Se o erro já é uma exceção HTTP que tratamos, re-lança-a
       if (
         error instanceof ConflictException ||
         error instanceof BadRequestException ||
@@ -289,17 +296,14 @@ export class VehiclesService {
 
       return await this.prisma.vehicle.delete({ where: { id } });
     } catch (error: any) {
-      // Tratamento de erros de chave estrangeira (P2003, P2014) é feito no catch
       if (error instanceof Prisma.PrismaClientKnownRequestError) {
         if (error.code === 'P2003' || error.code === 'P2014') {
-          // Foreign key constraint failed
           throw new BadRequestException(
             'Não é possível excluir este veículo. Ele possui registros relacionados (ex: entregas, pedidos).',
           );
         }
       }
 
-      // Se o erro já é uma exceção HTTP que tratamos, re-lança-a
       if (
         error instanceof NotFoundException ||
         error instanceof BadRequestException
