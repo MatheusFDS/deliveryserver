@@ -1,4 +1,3 @@
-// main.ts
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
@@ -7,7 +6,7 @@ import {
   AllExceptionsFilter,
   HttpExceptionFilter,
 } from './common/filters/http-exception.filter';
-import { PrismaExceptionFilter } from './common/filters/prisma-exception.filter'; // Certifique-se de que o caminho está correto!
+import { PrismaExceptionFilter } from './common/filters/prisma-exception.filter';
 
 const port = process.env.PORT || 4000;
 
