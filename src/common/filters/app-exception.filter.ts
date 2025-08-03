@@ -43,7 +43,7 @@ export class AppExceptionFilter implements ExceptionFilter {
           break;
         case 'P2003':
           status = HttpStatus.BAD_REQUEST;
-          message = 'Violação de chave estrangeira.';
+          message = 'Já existem registros lançados para esse registro.';
           break;
         case 'P2025':
           status = HttpStatus.NOT_FOUND;
