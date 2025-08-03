@@ -8,7 +8,7 @@ import {
   Delete,
   UseGuards,
   Req,
-  Query, // Import Query
+  Query, // Keep Query for page/pageSize
 } from '@nestjs/common';
 import { VehiclesService } from './vehicles.service';
 import { CreateVehicleDto } from './dto/create-vehicle.dto';
@@ -30,17 +30,13 @@ export class VehiclesController {
   @Get()
   async findAll(
     @Req() req,
-    @Query('search') search?: string, // Add search query parameter
-    @Query('page') page: number = 1, // Add page query parameter with default
-    @Query('pageSize') pageSize: number = 10, // Add pageSize query parameter with default
+    // REMOVED: @Query('search') search?: string,
+    @Query('page') page: number = 1, // Keep page query parameter with default
+    @Query('pageSize') pageSize: number = 10, // Keep pageSize query parameter with default
   ) {
     const userId = req.user.userId;
-    return this.vehiclesService.findAllByUserId(
-      userId,
-      search,
-      +page,
-      +pageSize,
-    ); // Pass parameters to service
+    // Pass only pagination parameters to service
+    return this.vehiclesService.findAllByUserId(userId, +page, +pageSize);
   }
 
   @Get(':id')
