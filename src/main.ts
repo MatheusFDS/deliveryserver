@@ -1,3 +1,4 @@
+// main.ts
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
@@ -6,7 +7,7 @@ import {
   AllExceptionsFilter,
   HttpExceptionFilter,
 } from './common/filters/http-exception.filter';
-import { PrismaExceptionFilter } from './common/filters/prisma-exception.filter'; // Importar o novo filtro
+import { PrismaExceptionFilter } from './common/filters/prisma-exception.filter'; // Certifique-se de que o caminho está correto
 
 const port = process.env.PORT || 4000;
 
@@ -44,13 +45,13 @@ async function bootstrap() {
     }),
   );
 
-  // A ordem dos filtros é importante:
-  // HttpExceptionFilter (trata NestJS HttpExceptions)
-  // PrismaExceptionFilter (trata erros específicos do Prisma)
-  // AllExceptionsFilter (filtro genérico para qualquer outra exceção não tratada)
+  // Ordem crucial para tratamento de exceções:
+  // 1. PrismaExceptionFilter: Captura erros do Prisma primeiro para dar mensagens específicas.
+  // 2. HttpExceptionFilter: Captura HttpExceptions (BadRequest, Conflict, NotFound, etc.) lançadas manualmente.
+  // 3. AllExceptionsFilter: Captura qualquer outra exceção não tratada como um fallback genérico.
   app.useGlobalFilters(
+    new PrismaExceptionFilter(), // Adicione ou mova este para ser o primeiro para erros específicos do DB
     new HttpExceptionFilter(),
-    new PrismaExceptionFilter(), // Adicionado o filtro Prisma aqui
     new AllExceptionsFilter(),
   );
 
