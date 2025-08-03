@@ -2,7 +2,10 @@ import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
 import { CorsOptions } from '@nestjs/common/interfaces/external/cors-options.interface';
-import { HttpExceptionFilter } from './common/filters/http-exception.filter'; // Importe o filtro
+import {
+  AllExceptionsFilter,
+  HttpExceptionFilter,
+} from './common/filters/http-exception.filter';
 
 const port = process.env.PORT || 4000;
 
@@ -41,8 +44,7 @@ async function bootstrap() {
     }),
   );
 
-  // Registra o filtro de exceções globalmente
-  app.useGlobalFilters(new HttpExceptionFilter());
+  app.useGlobalFilters(new HttpExceptionFilter(), new AllExceptionsFilter());
 
   await app.listen(port, '0.0.0.0');
   console.log(`🚀 Servidor rodando em http://localhost:${port}`);

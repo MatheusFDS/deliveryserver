@@ -1,25 +1,19 @@
-// Adapte este CONCEITO ao seu http-exception.filter.ts que FUNCIONA
-// Certifique-se de que as importações de Request e Response (ou ExpressRequest/ExpressResponse)
-// e a estrutura Catch e argumentsHost estejam conforme o seu código.
-
-// Exemplo conceitual com os logs que precisamos:
 import {
   Catch,
   ArgumentsHost,
   HttpException,
   ExceptionFilter,
+  HttpStatus,
+  Logger,
 } from '@nestjs/common';
-// Use suas importações de Request e Response aqui que funcionam para você
-// Ex: import { Request, Response as ExpressResponse } from 'express';
-// Ou: import { Request, Response } from 'express';
 
-@Catch(HttpException) // O filtro deve capturar HttpException
+@Catch(HttpException)
 export class HttpExceptionFilter implements ExceptionFilter {
+  private readonly logger = new Logger(HttpExceptionFilter.name);
+
   catch(exception: HttpException, host: ArgumentsHost) {
     const ctx = host.switchToHttp();
-    // Use o tipo de Response que funciona para você, ex: <Response>() ou <ExpressResponse>()
     const response = ctx.getResponse<any>();
-    // Use o tipo de Request que funciona para você, ex: <Request>()
     const request = ctx.getRequest<any>();
     const status = exception.getStatus();
 
@@ -29,20 +23,39 @@ export class HttpExceptionFilter implements ExceptionFilter {
         ? errorResponse.message
         : exception.message;
 
-    // --- ESTES SÃO OS LOGS DE DEPURACAO CRÍTICOS ---
-    console.log('--- HttpExceptionFilter Ativado (Seu Formato) ---');
-    console.log('Status HTTP:', status);
-    console.log('Mensagem da Exceção (Filtro):', message);
-    console.log('Path da Requisição:', request.url);
-    console.log('Objeto da Exceção Completa:', exception);
-    console.log('--- Fim Log de Depuração do Filtro ---');
-    // --- FIM DOS LOGS DE DEPURACAO CRÍTICOS ---
+    this.logger.error(
+      `HTTP Exception - Status: ${status}, Message: ${message}, Path: ${request.url}`,
+      exception.stack,
+    );
 
     response.status(status).json({
       statusCode: status,
       timestamp: new Date().toISOString(),
       path: request.url,
-      message: message,
+      message,
+    });
+  }
+}
+
+@Catch()
+export class AllExceptionsFilter implements ExceptionFilter {
+  private readonly logger = new Logger(AllExceptionsFilter.name);
+
+  catch(exception: unknown, host: ArgumentsHost) {
+    const ctx = host.switchToHttp();
+    const response = ctx.getResponse<any>();
+    const request = ctx.getRequest<any>();
+
+    this.logger.error(
+      `Unhandled Exception - Path: ${request.url}`,
+      exception instanceof Error ? exception.stack : '',
+    );
+
+    response.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
+      statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
+      timestamp: new Date().toISOString(),
+      path: request.url,
+      message: 'Internal server error',
     });
   }
 }
