@@ -2,11 +2,7 @@ import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
 import { CorsOptions } from '@nestjs/common/interfaces/external/cors-options.interface';
-import {
-  AllExceptionsFilter,
-  HttpExceptionFilter,
-} from './common/filters/http-exception.filter';
-import { PrismaExceptionFilter } from './common/filters/prisma-exception.filter';
+import { AppExceptionFilter } from './common/filters/app-exception.filter';
 
 const port = process.env.PORT || 4000;
 
@@ -44,11 +40,7 @@ async function bootstrap() {
     }),
   );
 
-  app.useGlobalFilters(
-    new PrismaExceptionFilter(),
-    new HttpExceptionFilter(),
-    new AllExceptionsFilter(),
-  );
+  app.useGlobalFilters(new AppExceptionFilter());
 
   await app.listen(port, '0.0.0.0');
 }
