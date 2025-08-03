@@ -10,6 +10,9 @@ import {
   Param,
   UploadedFile,
   UseInterceptors,
+  Query,
+  DefaultValuePipe,
+  ParseIntPipe,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
@@ -31,9 +34,21 @@ export class DriversController {
   }
 
   @Get()
-  findAll(@Req() req: Request) {
+  findAll(
+    @Req() req: Request,
+    @Query('search') search?: string,
+    @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number = 1,
+    @Query('pageSize', new DefaultValuePipe(10), ParseIntPipe)
+    pageSize: number = 10,
+  ) {
     const userId = (req.user as any).userId;
-    return this.driversService.findAllByUserId(userId);
+    return this.driversService.findAllByUserId(userId, search, page, pageSize);
+  }
+
+  @Get('all')
+  findAllByTenant(@Req() req: Request) {
+    const userId = (req.user as any).userId;
+    return this.driversService.findAllByTenant(userId);
   }
 
   @Get('available-users')

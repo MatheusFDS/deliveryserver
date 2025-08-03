@@ -3,10 +3,13 @@ import {
   NotFoundException,
   BadRequestException,
   UnauthorizedException,
+  InternalServerErrorException,
+  ConflictException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateDriverDto } from './dto/create-driver.dto';
 import { UpdateDriverDto } from './dto/update-driver.dto';
+import { Prisma } from '@prisma/client';
 
 @Injectable()
 export class DriversService {
@@ -41,76 +44,121 @@ export class DriversService {
   async create(createDriverDto: CreateDriverDto, userId: string) {
     const tenantId = await this.getTenantIdFromUserId(userId);
 
+    const existingDriverWithCpf = await this.prisma.driver.findFirst({
+      where: { cpf: createDriverDto.cpf, tenantId },
+    });
+    if (existingDriverWithCpf) {
+      throw new ConflictException(
+        `Já existe um motorista com o CPF "${createDriverDto.cpf}" nesta empresa.`,
+      );
+    }
+
     if (createDriverDto.userId) {
       const user = await this.prisma.user.findUnique({
         where: { id: createDriverDto.userId },
-        include: {
-          role: {
-            select: {
-              name: true,
-            },
-          },
-        },
+        include: { role: { select: { name: true } } },
       });
-
       if (!user) {
         throw new NotFoundException('Usuário para associação não encontrado.');
       }
-
       if (user.tenantId !== tenantId) {
         throw new BadRequestException(
           'Usuário para associação não pertence ao mesmo tenant.',
         );
       }
-
       if (!user.role || user.role.name !== 'driver') {
         throw new BadRequestException(
           'O usuário selecionado não possui a role "driver".',
         );
       }
-
-      const existingDriver = await this.prisma.driver.findUnique({
+      const existingDriverWithUser = await this.prisma.driver.findUnique({
         where: { userId: createDriverDto.userId },
       });
-
-      if (existingDriver) {
-        throw new BadRequestException(
+      if (existingDriverWithUser) {
+        throw new ConflictException(
           'Este usuário já está associado a outro motorista.',
         );
       }
     }
 
-    return this.prisma.driver.create({
-      data: {
-        ...createDriverDto,
-        tenantId,
-      },
-      include: {
-        User: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-          },
-        },
-      },
-    });
+    try {
+      return this.prisma.driver.create({
+        data: { ...createDriverDto, tenantId },
+        include: { User: { select: { id: true, name: true, email: true } } },
+      });
+    } catch (error) {
+      throw new InternalServerErrorException(
+        'Erro inesperado ao criar o motorista.',
+      );
+    }
   }
 
-  async findAllByUserId(userId: string) {
+  async findAllByUserId(
+    userId: string,
+    search?: string,
+    page: number = 1,
+    pageSize: number = 10,
+  ) {
     const tenantId = await this.getTenantIdFromUserId(userId);
-    return this.prisma.driver.findMany({
-      where: { tenantId },
-      include: {
-        User: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
+    const skip = (page - 1) * pageSize;
+    const take = pageSize;
+
+    const where: Prisma.DriverWhereInput = {
+      tenantId,
+    };
+
+    if (search) {
+      where.OR = [
+        { name: { contains: search, mode: 'insensitive' } },
+        { cpf: { contains: search, mode: 'insensitive' } },
+        { license: { contains: search, mode: 'insensitive' } },
+        { User: { name: { contains: search, mode: 'insensitive' } } },
+      ];
+    }
+
+    try {
+      const [drivers, total] = await this.prisma.$transaction([
+        this.prisma.driver.findMany({
+          where,
+          skip,
+          take,
+          include: { User: { select: { id: true, name: true, email: true } } },
+          orderBy: { createdAt: 'desc' },
+        }),
+        this.prisma.driver.count({ where }),
+      ]);
+
+      return {
+        data: drivers,
+        total,
+        page,
+        pageSize,
+        lastPage: Math.ceil(total / pageSize),
+      };
+    } catch (error) {
+      throw new InternalServerErrorException(
+        'Erro inesperado ao buscar os motoristas.',
+      );
+    }
+  }
+
+  async findAllByTenant(userId: string) {
+    const tenantId = await this.getTenantIdFromUserId(userId);
+    try {
+      return await this.prisma.driver.findMany({
+        where: { tenantId },
+        include: {
+          User: {
+            select: { id: true, name: true, email: true },
           },
         },
-      },
-    });
+        orderBy: { name: 'asc' },
+      });
+    } catch (error) {
+      throw new InternalServerErrorException(
+        'Erro inesperado ao buscar todos os motoristas.',
+      );
+    }
   }
 
   async findOneByIdAndUserId(id: string, userId: string) {
@@ -139,90 +187,93 @@ export class DriversService {
 
   async update(id: string, updateDriverDto: UpdateDriverDto, userId: string) {
     const tenantId = await this.getTenantIdFromUserId(userId);
-
     const driver = await this.prisma.driver.findUnique({
       where: { id, tenantId },
     });
-
     if (!driver) {
       throw new NotFoundException(
-        'Motorista não encontrado ou não pertence ao seu tenant.',
+        'Motorista não encontrado ou não pertence à sua empresa.',
       );
+    }
+
+    if (updateDriverDto.cpf && updateDriverDto.cpf !== driver.cpf) {
+      const existingDriverWithCpf = await this.prisma.driver.findFirst({
+        where: { cpf: updateDriverDto.cpf, tenantId, id: { not: id } },
+      });
+      if (existingDriverWithCpf) {
+        throw new ConflictException(
+          `Já existe outro motorista com o CPF "${updateDriverDto.cpf}" nesta empresa.`,
+        );
+      }
     }
 
     if (updateDriverDto.userId) {
       const user = await this.prisma.user.findUnique({
         where: { id: updateDriverDto.userId },
-        include: {
-          role: {
-            select: {
-              name: true,
-            },
-          },
-        },
+        include: { role: { select: { name: true } } },
       });
 
-      if (!user) {
+      if (!user)
         throw new NotFoundException('Usuário para associação não encontrado.');
-      }
-
-      if (user.tenantId !== tenantId) {
+      if (user.tenantId !== tenantId)
         throw new BadRequestException(
           'Usuário para associação não pertence ao mesmo tenant.',
         );
-      }
-
-      if (!user.role || user.role.name !== 'driver') {
+      if (!user.role || user.role.name !== 'driver')
         throw new BadRequestException(
           'O usuário selecionado não possui a role "driver".',
         );
-      }
 
-      const existingDriver = await this.prisma.driver.findFirst({
-        where: {
-          userId: updateDriverDto.userId,
-          id: { not: id },
-        },
+      const existingDriverWithUser = await this.prisma.driver.findFirst({
+        where: { userId: updateDriverDto.userId, id: { not: id } },
       });
-
-      if (existingDriver) {
-        throw new BadRequestException(
+      if (existingDriverWithUser) {
+        throw new ConflictException(
           'Este usuário já está associado a outro motorista.',
         );
       }
     }
 
-    return this.prisma.driver.update({
-      where: { id },
-      data: updateDriverDto,
-      include: {
-        User: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-          },
-        },
-      },
-    });
+    try {
+      return this.prisma.driver.update({
+        where: { id },
+        data: updateDriverDto,
+        include: { User: { select: { id: true, name: true, email: true } } },
+      });
+    } catch (error) {
+      throw new InternalServerErrorException(
+        'Erro inesperado ao atualizar o motorista.',
+      );
+    }
   }
 
   async remove(id: string, userId: string) {
     const tenantId = await this.getTenantIdFromUserId(userId);
-
     const driver = await this.prisma.driver.findUnique({
       where: { id, tenantId },
     });
-
     if (!driver) {
       throw new NotFoundException(
-        'Motorista não encontrado ou não pertence ao seu tenant.',
+        'Motorista não encontrado ou não pertence à sua empresa.',
       );
     }
 
-    return this.prisma.driver.delete({
-      where: { id },
+    const relatedVehicles = await this.prisma.vehicle.count({
+      where: { driverId: id, tenantId },
     });
+    if (relatedVehicles > 0) {
+      throw new BadRequestException(
+        'Não é possível excluir. Este motorista está associado a um ou mais veículos.',
+      );
+    }
+
+    try {
+      return await this.prisma.driver.delete({ where: { id } });
+    } catch (error) {
+      throw new InternalServerErrorException(
+        'Erro inesperado ao excluir o motorista.',
+      );
+    }
   }
 
   async findOrdersByAuthUser(userId: string) {
@@ -252,11 +303,9 @@ export class DriversService {
 
   async saveProof(orderId: string, file: Express.Multer.File, userId: string) {
     const driver = await this.getDriverByUserId(userId);
-
     const order = await this.prisma.order.findUnique({
       where: { id: orderId, tenantId: driver.tenantId, driverId: driver.id },
     });
-
     if (!order) {
       throw new NotFoundException(
         'Pedido não encontrado ou não pertence a este motorista.',
@@ -285,27 +334,18 @@ export class DriversService {
 
   async getAvailableUsersByUserId(userId: string) {
     const tenantId = await this.getTenantIdFromUserId(userId);
-
     return this.prisma.user.findMany({
       where: {
         tenantId,
         isActive: true,
         driver: null,
-        role: {
-          name: 'driver',
-        },
+        role: { name: 'driver' },
       },
       select: {
         id: true,
         name: true,
         email: true,
-        role: {
-          select: {
-            id: true,
-            name: true,
-            isPlatformRole: true,
-          },
-        },
+        role: { select: { id: true, name: true, isPlatformRole: true } },
       },
     });
   }
