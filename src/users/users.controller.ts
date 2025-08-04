@@ -8,6 +8,9 @@ import {
   Delete,
   UseGuards,
   Req,
+  Query,
+  DefaultValuePipe,
+  ParseIntPipe,
 } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { CreateUserDto } from './dto/create-user.dto';
@@ -32,7 +35,6 @@ export class UsersController {
   @Roles('admin')
   async create(@Body() createUserDto: CreateUserDto, @Req() req: Request) {
     const requestingUserId = (req.user as any).userId;
-    // CORRIGIDO: Chamando createUserForTenant com os argumentos corretos
     return this.usersService.createUserForTenant(
       createUserDto,
       requestingUserId,
@@ -41,9 +43,27 @@ export class UsersController {
 
   @Get()
   @Roles('admin')
-  async findAll(@Req() req: Request) {
+  async findAll(
+    @Req() req: Request,
+    @Query('search') search?: string,
+    @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number = 1,
+    @Query('pageSize', new DefaultValuePipe(10), ParseIntPipe)
+    pageSize: number = 10,
+  ) {
     const requestingUserId = (req.user as any).userId;
-    return this.usersService.findAllByTenant(requestingUserId);
+    return this.usersService.findAllByTenant(
+      requestingUserId,
+      search,
+      page,
+      pageSize,
+    );
+  }
+
+  @Get('all')
+  @Roles('admin')
+  async findAllList(@Req() req: Request) {
+    const requestingUserId = (req.user as any).userId;
+    return this.usersService.findAllByTenantList(requestingUserId);
   }
 
   @Get(':id')
@@ -72,6 +92,11 @@ export class UsersController {
   @Roles('admin')
   async remove(@Param('id') id: string, @Req() req: Request) {
     const requestingUserId = (req.user as any).userId;
-    return this.usersService.inactivateUserForTenant(id, requestingUserId);
+    // O método de serviço para inativar já foi renomeado e ajustado, mantemos a chamada.
+    return this.usersService.updateUserForTenant(
+      id,
+      { isActive: false },
+      requestingUserId,
+    );
   }
 }
