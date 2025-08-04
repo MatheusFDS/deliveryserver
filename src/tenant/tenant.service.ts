@@ -1,28 +1,19 @@
 import {
   Injectable,
   ForbiddenException,
-  BadRequestException,
   NotFoundException,
   UnauthorizedException,
+  InternalServerErrorException,
+  ConflictException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { UpdateTenantDto } from './dto/update-tenant.dto';
 import { CreateTenantDto } from './dto/create-tenant.dto';
+import { Prisma } from '@prisma/client';
 
 @Injectable()
 export class TenantService {
   constructor(private prisma: PrismaService) {}
-
-  private async getTenantIdFromUserId(userId: string): Promise<string> {
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId },
-      select: { tenantId: true },
-    });
-    if (!user || !user.tenantId) {
-      throw new UnauthorizedException('Usuário não associado a um tenant.');
-    }
-    return user.tenantId;
-  }
 
   private async getRequestingUserWithRole(requestingUserId: string): Promise<{
     id: string;
@@ -43,21 +34,26 @@ export class TenantService {
     return user;
   }
 
-  activateTenant() {
-    throw new Error('Method not implemented.');
-  }
-
-  getTenantSettings() {
-    throw new Error('Method not implemented.');
-  }
+  // ==============================================================
+  // OPERAÇÕES DE TENANT - NÍVEL DE TENANT (Admin do Tenant)
+  // ==============================================================
 
   async getTenantByUserId(userId: string) {
-    const tenantId = await this.getTenantIdFromUserId(userId);
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { tenantId: true },
+    });
+    if (!user || !user.tenantId) {
+      throw new UnauthorizedException('Usuário não associado a um tenant.');
+    }
+
     const tenant = await this.prisma.tenant.findUnique({
-      where: { id: tenantId },
+      where: { id: user.tenantId },
     });
     if (!tenant) {
-      throw new NotFoundException(`Tenant com ID ${tenantId} não encontrado.`);
+      throw new NotFoundException(
+        `Tenant com ID ${user.tenantId} não encontrado.`,
+      );
     }
     return tenant;
   }
@@ -69,17 +65,17 @@ export class TenantService {
   ) {
     const requestingUser =
       await this.getRequestingUserWithRole(requestingUserId);
-    if (
-      requestingUser.role.name !== 'admin' &&
-      requestingUser.role.name !== 'superadmin'
-    ) {
+
+    if (requestingUser.role.name !== 'admin') {
       throw new ForbiddenException(
         'Sua role não permite a atualização de tenants.',
       );
     }
 
-    const actualTenantId = requestingUser.tenantId;
-    if (!actualTenantId || actualTenantId !== tenantToUpdateId) {
+    if (
+      !requestingUser.tenantId ||
+      requestingUser.tenantId !== tenantToUpdateId
+    ) {
       throw new ForbiddenException(
         'Você só pode atualizar o seu próprio tenant.',
       );
@@ -91,16 +87,15 @@ export class TenantService {
         data,
       });
     } catch (error) {
-      if (error.code === 'P2025') {
-        throw new NotFoundException(
-          `Tenant com ID ${tenantToUpdateId} não encontrado.`,
-        );
-      }
-      throw new BadRequestException(
-        'Erro ao atualizar tenant no banco de dados.',
+      throw new InternalServerErrorException(
+        'Erro inesperado ao atualizar a empresa.',
       );
     }
   }
+
+  // ==============================================================
+  // OPERAÇÕES DE TENANT - NÍVEL DE PLATAFORMA (Superadmin)
+  // ==============================================================
 
   async createTenantByPlatformAdmin(
     createTenantDto: CreateTenantDto,
@@ -113,26 +108,37 @@ export class TenantService {
         'Apenas superadministradores podem criar novos tenants.',
       );
     }
+
     try {
-      const newTenant = await this.prisma.tenant.create({
+      return await this.prisma.tenant.create({
         data: {
           ...createTenantDto,
           isActive: true,
         },
       });
-      return newTenant;
-    } catch (error) {
-      if (error.code === 'P2002' && error.meta?.target?.includes('domain')) {
-        throw new BadRequestException('Um tenant com este domínio já existe.');
+    } catch (error: any) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      ) {
+        const target = (error.meta?.target as string[])?.join(', ') || 'campo';
+        throw new ConflictException(
+          `Uma empresa com este ${target} já existe.`,
+        );
       }
-      if (error.code === 'P2002' && error.meta?.target?.includes('name')) {
-        throw new BadRequestException('Um tenant com este nome já existe.');
-      }
-      throw new BadRequestException('Erro ao criar tenant.');
+      throw new InternalServerErrorException(
+        'Erro inesperado ao criar a empresa.',
+      );
     }
   }
 
-  async getAllTenantsByPlatformAdmin(requestingUserId: string) {
+  async getAllTenantsByPlatformAdmin(
+    requestingUserId: string,
+    search?: string,
+    includeInactive?: boolean,
+    page: number = 1,
+    pageSize: number = 10,
+  ) {
     const requestingUser =
       await this.getRequestingUserWithRole(requestingUserId);
     if (requestingUser.role.name !== 'superadmin') {
@@ -140,7 +146,45 @@ export class TenantService {
         'Apenas superadministradores podem listar todos os tenants.',
       );
     }
-    return this.prisma.tenant.findMany();
+
+    const skip = (page - 1) * pageSize;
+    const take = pageSize;
+    const where: Prisma.TenantWhereInput = {};
+
+    if (search) {
+      where.OR = [
+        { name: { contains: search, mode: 'insensitive' } },
+        { domain: { contains: search, mode: 'insensitive' } },
+      ];
+    }
+
+    if (!includeInactive) {
+      where.isActive = true;
+    }
+
+    try {
+      const [tenants, total] = await this.prisma.$transaction([
+        this.prisma.tenant.findMany({
+          where,
+          skip,
+          take,
+          orderBy: { name: 'asc' },
+        }),
+        this.prisma.tenant.count({ where }),
+      ]);
+
+      return {
+        data: tenants,
+        total,
+        page,
+        pageSize,
+        lastPage: Math.ceil(total / pageSize),
+      };
+    } catch (error) {
+      throw new InternalServerErrorException(
+        'Erro inesperado ao buscar as empresas.',
+      );
+    }
   }
 
   async getTenantByIdByPlatformAdmin(
@@ -158,7 +202,7 @@ export class TenantService {
       where: { id: tenantId },
     });
     if (!tenant) {
-      throw new NotFoundException(`Tenant com ID ${tenantId} não encontrado.`);
+      throw new NotFoundException(`Empresa com ID ${tenantId} não encontrada.`);
     }
     return tenant;
   }
@@ -177,24 +221,28 @@ export class TenantService {
     }
 
     try {
-      const updatedTenant = await this.prisma.tenant.update({
+      return await this.prisma.tenant.update({
         where: { id: tenantId },
         data: updateTenantDto,
       });
-      return updatedTenant;
     } catch (error: any) {
-      if (error.code === 'P2025') {
-        throw new NotFoundException(
-          `Tenant com ID ${tenantId} não encontrado.`,
-        );
+      if (error instanceof Prisma.PrismaClientKnownRequestError) {
+        if (error.code === 'P2025') {
+          throw new NotFoundException(
+            `Empresa com ID ${tenantId} não encontrada.`,
+          );
+        }
+        if (error.code === 'P2002') {
+          const target =
+            (error.meta?.target as string[])?.join(', ') || 'campo';
+          throw new ConflictException(
+            `Uma empresa com este ${target} já existe.`,
+          );
+        }
       }
-      if (error.code === 'P2002' && error.meta?.target?.includes('domain')) {
-        throw new BadRequestException('Um tenant com este domínio já existe.');
-      }
-      if (error.code === 'P2002' && error.meta?.target?.includes('name')) {
-        throw new BadRequestException('Um tenant com este nome já existe.');
-      }
-      throw new BadRequestException('Erro ao atualizar tenant.');
+      throw new InternalServerErrorException(
+        'Erro inesperado ao atualizar a empresa.',
+      );
     }
   }
 
@@ -213,17 +261,22 @@ export class TenantService {
       return await this.prisma.tenant.delete({
         where: { id: tenantId },
       });
-    } catch (error) {
-      if (error.code === 'P2025') {
-        throw new NotFoundException(
-          `Tenant com ID ${tenantId} não encontrado.`,
-        );
-      } else if (error.code === 'P2003' || error.code === 'P2014') {
-        throw new BadRequestException(
-          `Não é possível deletar o tenant com ID ${tenantId} devido a registros relacionados existentes.`,
-        );
+    } catch (error: any) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError) {
+        if (error.code === 'P2025') {
+          throw new NotFoundException(
+            `Empresa com ID ${tenantId} não encontrada.`,
+          );
+        }
+        if (error.code === 'P2003') {
+          throw new ConflictException(
+            'Não é possível excluir esta empresa pois existem registros (usuários, veículos, etc.) vinculados a ela.',
+          );
+        }
       }
-      throw new BadRequestException('Erro ao deletar tenant.');
+      throw new InternalServerErrorException(
+        'Erro inesperado ao excluir a empresa.',
+      );
     }
   }
 }

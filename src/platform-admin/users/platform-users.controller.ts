@@ -10,6 +10,8 @@ import {
   ParseUUIDPipe,
   Query,
   Req,
+  DefaultValuePipe,
+  ParseIntPipe,
 } from '@nestjs/common';
 import { UsersService } from '../../users/users.service';
 import { CreateUserDto } from '../../users/dto/create-user.dto';
@@ -55,10 +57,13 @@ export class PlatformUsersController {
 
   @Get()
   async findAllUsers(
-    @Req() req: Request, // CORRIGIDO: req: Request (obrigatório) primeiro
-    @Query('tenantId', new ParseUUIDPipe({ optional: true })) tenantId?: string, // Opcional
-    @Query('includeInactive') includeInactive: string = 'false', // Opcional (com valor default)
-    @Query('searchTerm') searchTerm?: string, // Opcional
+    @Req() req: Request,
+    @Query('tenantId', new ParseUUIDPipe({ optional: true })) tenantId?: string,
+    @Query('includeInactive') includeInactive: string = 'false',
+    @Query('searchTerm') searchTerm?: string,
+    @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number = 1,
+    @Query('pageSize', new DefaultValuePipe(10), ParseIntPipe)
+    pageSize: number = 10,
   ) {
     const requestingUserId = (req.user as any).userId;
     const includeInactiveBool = includeInactive === 'true';
@@ -67,6 +72,8 @@ export class PlatformUsersController {
       tenantId,
       includeInactiveBool,
       searchTerm,
+      page,
+      pageSize,
     );
   }
 

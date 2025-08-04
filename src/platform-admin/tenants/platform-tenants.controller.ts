@@ -8,7 +8,10 @@ import {
   Put,
   Delete,
   ParseUUIDPipe,
-  Req, // Adicionado para obter o usuário solicitante
+  Req,
+  Query,
+  DefaultValuePipe,
+  ParseIntPipe,
 } from '@nestjs/common';
 import { TenantService } from '../../tenant/tenant.service';
 import { JwtAuthGuard } from '../../auth/jwt-auth.guard';
@@ -16,7 +19,7 @@ import { RolesGuard } from '../../auth/roles.guard';
 import { Roles } from '../../auth/roles.decorator';
 import { CreateTenantDto } from '../../tenant/dto/create-tenant.dto';
 import { UpdateTenantDto } from '../../tenant/dto/update-tenant.dto';
-import { Request } from 'express'; // Para tipagem do req
+import { Request } from 'express';
 
 @Controller('platform-admin/tenants')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -24,7 +27,7 @@ import { Request } from 'express'; // Para tipagem do req
 export class PlatformTenantsController {
   constructor(private readonly tenantService: TenantService) {}
 
-  @Post() // Cria um novo tenant (apenas para superadmin)
+  @Post()
   async createTenant(
     @Body() createTenantDto: CreateTenantDto,
     @Req() req: Request,
@@ -36,13 +39,27 @@ export class PlatformTenantsController {
     );
   }
 
-  @Get() // Lista todos os tenants (apenas para superadmin)
-  async getAllTenants(@Req() req: Request) {
+  @Get()
+  async getAllTenants(
+    @Req() req: Request,
+    @Query('searchTerm') searchTerm?: string,
+    @Query('includeInactive') includeInactive: string = 'false',
+    @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number = 1,
+    @Query('pageSize', new DefaultValuePipe(10), ParseIntPipe)
+    pageSize: number = 10,
+  ) {
     const requestingUserId = (req.user as any).userId;
-    return this.tenantService.getAllTenantsByPlatformAdmin(requestingUserId);
+    const includeInactiveBool = includeInactive === 'true';
+    return this.tenantService.getAllTenantsByPlatformAdmin(
+      requestingUserId,
+      searchTerm,
+      includeInactiveBool,
+      page,
+      pageSize,
+    );
   }
 
-  @Get(':tenantId') // Busca um tenant por ID (apenas para superadmin)
+  @Get(':tenantId')
   async getTenantById(
     @Param('tenantId', ParseUUIDPipe) tenantId: string,
     @Req() req: Request,
@@ -54,7 +71,7 @@ export class PlatformTenantsController {
     );
   }
 
-  @Put(':tenantId') // Atualiza um tenant (apenas para superadmin)
+  @Put(':tenantId')
   async updateTenant(
     @Param('tenantId', ParseUUIDPipe) tenantId: string,
     @Body() updateTenantDto: UpdateTenantDto,
@@ -68,7 +85,7 @@ export class PlatformTenantsController {
     );
   }
 
-  @Delete(':tenantId') // Deleta um tenant (apenas para superadmin)
+  @Delete(':tenantId')
   async deleteTenant(
     @Param('tenantId', ParseUUIDPipe) tenantId: string,
     @Req() req: Request,

@@ -128,7 +128,7 @@ export class UsersService {
 
     const where: Prisma.UserWhereInput = {
       tenantId,
-      role: { isPlatformRole: false }, // Admins de tenant só veem usuários de tenant
+      role: { isPlatformRole: false },
     };
 
     if (search) {
@@ -186,6 +186,26 @@ export class UsersService {
     }
   }
 
+  async findOneById(userId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        role: { select: { name: true } },
+        tenantId: true,
+        isActive: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+    if (!user) {
+      throw new NotFoundException(`Usuário com ID ${userId} não encontrado.`);
+    }
+    return user;
+  }
+
   async findOneByIdAndTenant(id: string, requestingUserId: string) {
     const requestingUserTenantId =
       await this.getTenantIdFromUserId(requestingUserId);
@@ -226,7 +246,6 @@ export class UsersService {
       );
     }
 
-    // Admin não pode editar a si mesmo para se inativar ou mudar o próprio perfil
     if (id === requestingUserId) {
       if (updateUserDto.isActive === false) {
         throw new BadRequestException('Administradores não podem se inativar.');
@@ -275,13 +294,73 @@ export class UsersService {
     }
   }
 
-  // MÉTODOS DE SUPERADMIN (NÃO ALTERADOS) PERMANECEM ABAIXO...
-  // ... findOneById, createPlatformUser, findAllUsersPlatform, etc ...
+  // ==============================================================
+  // OPERAÇÕES DE USUÁRIO - NÍVEL DE PLATAFORMA (Superadmin)
+  // ==============================================================
 
-  // Manter os métodos que não foram alterados
-  async findOneById(userId: string) {
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId },
+  async createPlatformUser(
+    createUserDto: CreateUserDto,
+    requestingUserId: string,
+    targetTenantId?: string | null,
+  ) {
+    const requestingUser =
+      await this.getRequestingUserWithRoleAndTenant(requestingUserId);
+
+    if (requestingUser.role.name !== 'superadmin') {
+      throw new ForbiddenException(
+        'Apenas superadministradores podem criar usuários de plataforma.',
+      );
+    }
+
+    const { password, roleId, ...data } = createUserDto;
+
+    const targetRole = await this.prisma.role.findUnique({
+      where: { id: roleId },
+    });
+    if (!targetRole)
+      throw new BadRequestException('Role especificada não existe.');
+
+    if (targetTenantId) {
+      const targetTenant = await this.prisma.tenant.findUnique({
+        where: { id: targetTenantId },
+      });
+      if (!targetTenant)
+        throw new NotFoundException(
+          `Tenant com ID ${targetTenantId} não encontrado.`,
+        );
+      if (targetRole.isPlatformRole)
+        throw new BadRequestException(
+          'Não é possível atribuir roles de plataforma a usuários de tenant.',
+        );
+    } else {
+      if (!targetRole.isPlatformRole)
+        throw new BadRequestException(
+          'Para usuários de plataforma, a role deve ser de plataforma.',
+        );
+    }
+
+    const existingUser = await this.prisma.user.findFirst({
+      where: {
+        email: data.email,
+        tenantId: targetTenantId ? targetTenantId : null,
+      },
+    });
+    if (existingUser) {
+      throw new ConflictException(
+        `Já existe um usuário com este email para ${targetTenantId ? 'o tenant especificado' : 'a plataforma'}.`,
+      );
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    return this.prisma.user.create({
+      data: {
+        ...data,
+        password: hashedPassword,
+        tenantId: targetTenantId,
+        roleId: roleId,
+        isActive: true,
+      },
       select: {
         id: true,
         email: true,
@@ -289,13 +368,213 @@ export class UsersService {
         role: { select: { name: true } },
         tenantId: true,
         isActive: true,
+      },
+    });
+  }
+
+  async findAllUsersPlatform(
+    requestingUserId: string,
+    tenantIdFilter?: string,
+    includeInactive: boolean = false,
+    searchTerm?: string,
+    page: number = 1,
+    pageSize: number = 10,
+  ) {
+    const requestingUser =
+      await this.getRequestingUserWithRoleAndTenant(requestingUserId);
+    if (requestingUser.role.name !== 'superadmin') {
+      throw new ForbiddenException(
+        'Apenas superadministradores podem listar todos os usuários.',
+      );
+    }
+
+    const skip = (page - 1) * pageSize;
+    const take = pageSize;
+    const where: Prisma.UserWhereInput = {};
+
+    if (tenantIdFilter) {
+      where.tenantId = tenantIdFilter;
+    }
+    if (!includeInactive) {
+      where.isActive = true;
+    }
+    if (searchTerm) {
+      where.OR = [
+        { name: { contains: searchTerm, mode: 'insensitive' } },
+        { email: { contains: searchTerm, mode: 'insensitive' } },
+      ];
+    }
+
+    try {
+      const [users, total] = await this.prisma.$transaction([
+        this.prisma.user.findMany({
+          where,
+          skip,
+          take,
+          select: {
+            id: true,
+            email: true,
+            name: true,
+            role: { select: { name: true, isPlatformRole: true, id: true } },
+            roleId: true,
+            tenantId: true,
+            isActive: true,
+            tenant: { select: { name: true } },
+          },
+          orderBy: { name: 'asc' },
+        }),
+        this.prisma.user.count({ where }),
+      ]);
+
+      return {
+        data: users,
+        total,
+        page,
+        pageSize,
+        lastPage: Math.ceil(total / pageSize),
+      };
+    } catch (error) {
+      throw new InternalServerErrorException(
+        'Erro inesperado ao buscar usuários da plataforma.',
+      );
+    }
+  }
+
+  async findOneUserPlatform(id: string, requestingUserId: string) {
+    const requestingUser =
+      await this.getRequestingUserWithRoleAndTenant(requestingUserId);
+    if (requestingUser.role.name !== 'superadmin') {
+      throw new ForbiddenException(
+        'Apenas superadministradores podem ver detalhes de usuários.',
+      );
+    }
+
+    const user = await this.prisma.user.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        role: { select: { name: true, isPlatformRole: true } },
+        tenantId: true,
+        isActive: true,
         createdAt: true,
         updatedAt: true,
+        tenant: { select: { name: true } },
       },
     });
     if (!user) {
-      throw new NotFoundException(`Usuário com ID ${userId} não encontrado.`);
+      throw new NotFoundException(`Usuário com ID ${id} não encontrado.`);
     }
     return user;
+  }
+
+  async updateUserPlatform(
+    id: string,
+    updateUserDto: UpdateUserDto,
+    requestingUserId: string,
+  ) {
+    const requestingUser =
+      await this.getRequestingUserWithRoleAndTenant(requestingUserId);
+    if (requestingUser.role.name !== 'superadmin') {
+      throw new ForbiddenException(
+        'Apenas superadministradores podem atualizar usuários da plataforma.',
+      );
+    }
+
+    const userToUpdate = await this.prisma.user.findUnique({
+      where: { id },
+      include: { role: true },
+    });
+    if (!userToUpdate)
+      throw new NotFoundException(`Usuário com ID ${id} não encontrado.`);
+
+    if (requestingUserId === id) {
+      if (updateUserDto.isActive === false)
+        throw new BadRequestException(
+          'Superadministradores não podem se inativar.',
+        );
+      if (
+        updateUserDto.roleId &&
+        userToUpdate.roleId !== updateUserDto.roleId
+      ) {
+        throw new BadRequestException(
+          'Superadministradores não podem alterar a própria role.',
+        );
+      }
+    }
+
+    const { password, ...updateData } = updateUserDto;
+    if (password) {
+      (updateData as any).password = await bcrypt.hash(password, 10);
+    }
+
+    return this.prisma.user.update({
+      where: { id },
+      data: updateData,
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        role: { select: { name: true } },
+        tenantId: true,
+        isActive: true,
+      },
+    });
+  }
+
+  async inactivateUserPlatform(id: string, requestingUserId: string) {
+    const requestingUser =
+      await this.getRequestingUserWithRoleAndTenant(requestingUserId);
+    if (requestingUser.role.name !== 'superadmin') {
+      throw new ForbiddenException(
+        'Apenas superadministradores podem inativar usuários da plataforma.',
+      );
+    }
+
+    const userToInactivate = await this.prisma.user.findUnique({
+      where: { id },
+      include: { role: true },
+    });
+    if (!userToInactivate) {
+      throw new NotFoundException(`Usuário com ID ${id} não encontrado.`);
+    }
+
+    if (requestingUserId === id) {
+      throw new BadRequestException(
+        'Superadministradores não podem se inativar.',
+      );
+    }
+
+    if (
+      userToInactivate.role.name === 'superadmin' &&
+      userToInactivate.isActive
+    ) {
+      const activeSuperadmins = await this.prisma.user.count({
+        where: {
+          role: { name: 'superadmin' },
+          isActive: true,
+          id: { not: id },
+        },
+      });
+      if (activeSuperadmins < 1) {
+        throw new BadRequestException(
+          'Não é possível inativar o único superadministrador ativo da plataforma.',
+        );
+      }
+    }
+
+    return this.prisma.user.update({
+      where: { id },
+      data: { isActive: false },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        role: { select: { name: true } },
+        tenantId: true,
+        isActive: true,
+      },
+    });
   }
 }
