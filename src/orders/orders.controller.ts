@@ -1,5 +1,3 @@
-// Em src/orders/orders.controller.ts
-
 import {
   Controller,
   Post,
@@ -8,6 +6,9 @@ import {
   Req,
   Get,
   Param,
+  Query,
+  DefaultValuePipe,
+  ParseIntPipe,
 } from '@nestjs/common';
 import { OrdersService } from './orders.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -21,14 +22,35 @@ export class OrdersController {
 
   @Post('upload')
   async upload(@Body() orders: Order[], @Req() req) {
-    const userId = req.user.userId; // Obtém userId do token
-    return this.ordersService.upload(orders, userId); // Passa userId em vez de tenantId
+    const userId = req.user.userId;
+    return this.ordersService.upload(orders, userId);
   }
 
   @Get()
-  async findAll(@Req() req) {
-    const userId = req.user.userId; // Obtém userId do token
-    return this.ordersService.findAllByUserId(userId); // Passa userId em vez de tenantId
+  async findAll(
+    @Req() req,
+    @Query('search') search?: string,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+    @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number = 1,
+    @Query('pageSize', new DefaultValuePipe(10), ParseIntPipe)
+    pageSize: number = 10,
+  ) {
+    const userId = req.user.userId;
+    return this.ordersService.findAllByUserId(
+      userId,
+      search,
+      startDate,
+      endDate,
+      page,
+      pageSize,
+    );
+  }
+
+  @Get('all')
+  async findAllByTenantList(@Req() req) {
+    const userId = req.user.userId;
+    return this.ordersService.findAllByTenantList(userId);
   }
 
   @Get(':id/history')
@@ -36,11 +58,11 @@ export class OrdersController {
     @Param('id') id: string,
     @Req() req,
   ): Promise<OrderHistoryEventDto[]> {
-    const userId = req.user.userId; // Obtém userId do token
+    const userId = req.user.userId;
     const history = await this.ordersService.findOrderHistoryByIdAndUserId(
       id,
       userId,
-    ); // Passa userId
+    );
     return history;
   }
 }
