@@ -56,15 +56,6 @@ export class VehiclesService {
       );
     }
 
-    const existingVehicleWithSameModel = await this.prisma.vehicle.findFirst({
-      where: { model: createVehicleDto.model, tenantId },
-    });
-    if (existingVehicleWithSameModel) {
-      throw new ConflictException(
-        `Já existe um veículo com o modelo "${createVehicleDto.model}" nesta empresa.`,
-      );
-    }
-
     try {
       return this.prisma.vehicle.create({
         data: {
@@ -214,11 +205,6 @@ export class VehiclesService {
       }
     }
 
-    if (
-      updateVehicleDto.model &&
-      updateVehicleDto.model.trim() !== existingVehicle.model
-    ) {
-    }
     try {
       return this.prisma.vehicle.update({
         where: { id },
