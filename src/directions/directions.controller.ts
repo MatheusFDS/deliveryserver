@@ -8,6 +8,9 @@ import {
   Delete,
   UseGuards,
   Req,
+  Query,
+  DefaultValuePipe,
+  ParseIntPipe,
 } from '@nestjs/common';
 import { DirectionsService } from './directions.service';
 import { CreateDirectionsDto } from './dto/create-directions.dto';
@@ -23,14 +26,30 @@ export class DirectionsController {
   @Post()
   async create(@Body() createDirectionsDto: CreateDirectionsDto, @Req() req) {
     const userId = req.user.userId;
-    // O tenantId NÃO deve vir do createDirectionsDto diretamente do cliente por questões de segurança.
     return this.directionsService.create(createDirectionsDto, userId);
   }
 
   @Get()
-  async findAll(@Req() req) {
+  async findAll(
+    @Req() req,
+    @Query('search') search?: string,
+    @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number = 1,
+    @Query('pageSize', new DefaultValuePipe(10), ParseIntPipe)
+    pageSize: number = 10,
+  ) {
     const userId = req.user.userId;
-    return this.directionsService.findAllByUserId(userId);
+    return this.directionsService.findAllByUserId(
+      userId,
+      search,
+      page,
+      pageSize,
+    );
+  }
+
+  @Get('all')
+  async findAllByTenant(@Req() req) {
+    const userId = req.user.userId;
+    return this.directionsService.findAllByTenant(userId);
   }
 
   @Get(':id')

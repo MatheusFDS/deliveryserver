@@ -2,10 +2,14 @@ import {
   Injectable,
   NotFoundException,
   UnauthorizedException,
+  ConflictException,
+  InternalServerErrorException,
+  BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateDirectionsDto } from './dto/create-directions.dto';
 import { UpdateDirectionsDto } from './dto/update-directions.dto';
+import { Prisma } from '@prisma/client';
 
 @Injectable()
 export class DirectionsService {
@@ -22,20 +26,115 @@ export class DirectionsService {
     return user.tenantId;
   }
 
+  private async checkOverlap(
+    tenantId: string,
+    rangeInicio: string,
+    rangeFim: string,
+    currentId?: string,
+  ) {
+    if (rangeInicio >= rangeFim) {
+      throw new BadRequestException(
+        'O CEP inicial deve ser menor que o CEP final.',
+      );
+    }
+
+    const whereClause: Prisma.DirectionsWhereInput = {
+      tenantId,
+      rangeFim: { gte: rangeInicio },
+      rangeInicio: { lte: rangeFim },
+    };
+
+    if (currentId) {
+      whereClause.id = { not: currentId };
+    }
+
+    const overlappingDirection = await this.prisma.directions.findFirst({
+      where: whereClause,
+    });
+
+    if (overlappingDirection) {
+      throw new ConflictException(
+        `A faixa de CEP ${rangeInicio}-${rangeFim} conflita com a região já existente "${overlappingDirection.regiao}" (${overlappingDirection.rangeInicio}-${overlappingDirection.rangeFim}).`,
+      );
+    }
+  }
+
   async create(createDirectionsDto: CreateDirectionsDto, userId: string) {
     const tenantId = await this.getTenantIdFromUserId(userId);
 
-    return this.prisma.directions.create({
-      data: {
-        ...createDirectionsDto,
-        tenantId,
-      },
-    });
+    await this.checkOverlap(
+      tenantId,
+      createDirectionsDto.rangeInicio,
+      createDirectionsDto.rangeFim,
+    );
+
+    try {
+      return await this.prisma.directions.create({
+        data: {
+          ...createDirectionsDto,
+          tenantId,
+        },
+      });
+    } catch (error) {
+      throw new InternalServerErrorException(
+        'Erro inesperado ao criar a direção.',
+      );
+    }
   }
 
-  async findAllByUserId(userId: string) {
+  async findAllByUserId(
+    userId: string,
+    search?: string,
+    page: number = 1,
+    pageSize: number = 10,
+  ) {
     const tenantId = await this.getTenantIdFromUserId(userId);
-    return this.prisma.directions.findMany({ where: { tenantId } });
+    const skip = (page - 1) * pageSize;
+    const take = pageSize;
+
+    const where: Prisma.DirectionsWhereInput = { tenantId };
+
+    if (search) {
+      where.OR = [{ regiao: { contains: search, mode: 'insensitive' } }];
+    }
+
+    try {
+      const [directions, total] = await this.prisma.$transaction([
+        this.prisma.directions.findMany({
+          where,
+          skip,
+          take,
+          orderBy: { createdAt: 'desc' },
+        }),
+        this.prisma.directions.count({ where }),
+      ]);
+
+      return {
+        data: directions,
+        total,
+        page,
+        pageSize,
+        lastPage: Math.ceil(total / pageSize),
+      };
+    } catch (error) {
+      throw new InternalServerErrorException(
+        'Erro inesperado ao buscar as direções.',
+      );
+    }
+  }
+
+  async findAllByTenant(userId: string) {
+    const tenantId = await this.getTenantIdFromUserId(userId);
+    try {
+      return await this.prisma.directions.findMany({
+        where: { tenantId },
+        orderBy: { regiao: 'asc' },
+      });
+    } catch (error) {
+      throw new InternalServerErrorException(
+        'Erro inesperado ao buscar todas as direções.',
+      );
+    }
   }
 
   async findOneByIdAndUserId(id: string, userId: string) {
@@ -45,7 +144,7 @@ export class DirectionsService {
     });
     if (!direction) {
       throw new NotFoundException(
-        `Direção com ID "${id}" não encontrada ou não pertence ao seu tenant.`,
+        'Direção não encontrada ou não pertence à sua empresa.',
       );
     }
     return direction;
@@ -57,36 +156,53 @@ export class DirectionsService {
     userId: string,
   ) {
     const tenantId = await this.getTenantIdFromUserId(userId);
-
     const existingDirection = await this.prisma.directions.findFirst({
       where: { id, tenantId },
     });
     if (!existingDirection) {
       throw new NotFoundException(
-        `Direção com ID "${id}" não encontrada ou não pertence ao seu tenant.`,
+        'Direção não encontrada ou não pertence à sua empresa.',
       );
     }
 
-    return this.prisma.directions.update({
-      where: { id },
-      data: updateDirectionsDto,
-    });
+    const newRangeInicio =
+      updateDirectionsDto.rangeInicio ?? existingDirection.rangeInicio;
+    const newRangeFim =
+      updateDirectionsDto.rangeFim ?? existingDirection.rangeFim;
+
+    await this.checkOverlap(tenantId, newRangeInicio, newRangeFim, id);
+
+    try {
+      return await this.prisma.directions.update({
+        where: { id },
+        data: updateDirectionsDto,
+      });
+    } catch (error) {
+      throw new InternalServerErrorException(
+        'Erro inesperado ao atualizar a direção.',
+      );
+    }
   }
 
   async remove(id: string, userId: string) {
     const tenantId = await this.getTenantIdFromUserId(userId);
-
     const existingDirection = await this.prisma.directions.findFirst({
       where: { id, tenantId },
     });
     if (!existingDirection) {
       throw new NotFoundException(
-        `Direção com ID "${id}" não encontrada ou não pertence ao seu tenant.`,
+        'Direção não encontrada ou não pertence à sua empresa.',
       );
     }
 
-    return this.prisma.directions.delete({
-      where: { id },
-    });
+    try {
+      return await this.prisma.directions.delete({
+        where: { id },
+      });
+    } catch (error) {
+      throw new InternalServerErrorException(
+        'Erro inesperado ao excluir a direção.',
+      );
+    }
   }
 }
