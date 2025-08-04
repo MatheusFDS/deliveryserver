@@ -34,7 +34,7 @@ export class OrdersController {
     @Query('endDate') endDate?: string,
     @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number = 1,
     @Query('pageSize', new DefaultValuePipe(10), ParseIntPipe)
-    pageSize: number = 10,
+    pageSize: number = 100,
   ) {
     const userId = req.user.userId;
     return this.ordersService.findAllByUserId(

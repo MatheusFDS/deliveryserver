@@ -31,44 +31,63 @@ export class OrdersService {
 
   private convertToISODate(dateString: string): string {
     let parsedDate = parse(dateString, 'dd/MM/yyyy', new Date());
+
     if (!isValid(parsedDate)) {
       parsedDate = parse(dateString, 'yyyy-MM-dd', new Date());
     }
+
     if (!isValid(parsedDate)) {
       parsedDate = new Date(dateString);
     }
+
     if (!isValid(parsedDate)) {
-      throw new BadRequestException(`Formato de data inválido: ${dateString}.`);
+      throw new BadRequestException(
+        `Formato de data inválido: ${dateString}. Esperado dd/MM/yyyy, yyyy-MM-dd, ou formato ISO completo.`,
+      );
     }
     return parsedDate.toISOString();
   }
 
   async upload(orders: any[], userId: string) {
     const tenantId = await this.getTenantIdFromUserId(userId);
+
     const createdOrders = [];
     const errors = [];
 
     for (const order of orders) {
       try {
+        let parsedDate: string | null = null;
+        if (order.data) {
+          try {
+            parsedDate = this.convertToISODate(order.data);
+          } catch (error) {
+            throw new BadRequestException(
+              `Formato de data inválido para o pedido ${order.numero}: '${order.data}'. Detalhe: ${error.message}`,
+            );
+          }
+        } else {
+          throw new BadRequestException(
+            `Data é obrigatória para o pedido ${order.numero || 'sem número'}.`,
+          );
+        }
+
         if (!order.numero) {
           throw new BadRequestException(
-            'O campo "numero" do pedido é obrigatório.',
+            `Número do pedido (campo 'numero') é obrigatório.`,
           );
         }
         const existingOrder = await this.prisma.order.findFirst({
-          where: { numero: order.numero.toString(), tenantId },
+          where: {
+            numero: order.numero.toString(),
+            tenantId: tenantId,
+          },
         });
+
         if (existingOrder) {
           throw new BadRequestException(
-            `Pedido com número ${order.numero} já existe.`,
+            `Pedido com número ${order.numero} já existe para o tenant ${tenantId}.`,
           );
         }
-        if (!order.data) {
-          throw new BadRequestException(
-            `Data é obrigatória para o pedido ${order.numero}.`,
-          );
-        }
-        const parsedDate = this.convertToISODate(order.data);
 
         const createdOrder = await this.prisma.order.create({
           data: {
@@ -130,6 +149,7 @@ export class OrdersService {
         errors,
       };
     }
+
     return {
       message: 'Todos os pedidos foram importados com sucesso.',
       createdOrders,
@@ -247,21 +267,14 @@ export class OrdersService {
     const order = await this.prisma.order.findFirst({
       where: { id: orderId, tenantId },
       include: {
-        Delivery: {
-          include: {
-            Driver: true,
-            Vehicle: true,
-            approvals: {
-              include: { User: true },
-              orderBy: { createdAt: 'asc' },
-            },
-          },
-        },
         deliveryProofs: {
           include: { Driver: true },
           orderBy: { createdAt: 'asc' },
         },
-        Driver: true,
+        history: {
+          include: { user: { select: { name: true } } },
+          orderBy: { createdAt: 'asc' },
+        },
       },
     });
 
@@ -277,15 +290,39 @@ export class OrdersService {
       eventType: OrderHistoryEventType.PEDIDO_CRIADO,
       description: `Pedido ${order.numero} criado no sistema.`,
       user: 'Sistema',
-      details: { orderNumber: order.numero, newStatus: OrderStatus.SEM_ROTA },
     });
 
-    // ... restante da lógica de histórico ...
+    order.history.forEach((historyEntry) => {
+      historyEvents.push({
+        id: historyEntry.id,
+        timestamp: historyEntry.createdAt.toISOString(),
+        eventType: OrderHistoryEventType.STATUS_PEDIDO_ATUALIZADO,
+        description: historyEntry.description,
+        user: historyEntry.user?.name || 'Sistema',
+        details: {
+          newStatus: historyEntry.status,
+        },
+      });
+    });
+
+    order.deliveryProofs.forEach((proof) => {
+      historyEvents.push({
+        id: proof.id,
+        timestamp: proof.createdAt.toISOString(),
+        eventType: OrderHistoryEventType.COMPROVANTE_ANEXADO,
+        description: `Comprovante de entrega anexado.`,
+        user: proof.Driver?.name || 'Motorista App',
+        details: {
+          proofUrl: proof.proofUrl,
+        },
+      });
+    });
 
     historyEvents.sort(
       (a, b) =>
         new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime(),
     );
+
     return historyEvents;
   }
 }

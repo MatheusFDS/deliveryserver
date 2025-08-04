@@ -19,16 +19,21 @@ export class AppExceptionFilter implements ExceptionFilter {
 
     let status = HttpStatus.INTERNAL_SERVER_ERROR;
     let message = 'Erro interno no servidor.';
+    let details: any;
 
     if (exception instanceof HttpException) {
       status = exception.getStatus();
       const errorResponse = exception.getResponse();
-      message =
-        typeof errorResponse === 'object' &&
-        errorResponse !== null &&
-        'message' in errorResponse
-          ? (errorResponse as any).message
-          : exception.message;
+
+      if (typeof errorResponse === 'object' && errorResponse !== null) {
+        message = (errorResponse as any).message || exception.message;
+        if ((errorResponse as any).errors) {
+          details = (errorResponse as any).errors;
+        }
+      } else {
+        // Correção: Garante que a mensagem seja sempre uma string
+        message = String(errorResponse);
+      }
     } else if (exception instanceof Prisma.PrismaClientKnownRequestError) {
       switch (exception.code) {
         case 'P2000':
@@ -62,11 +67,17 @@ export class AppExceptionFilter implements ExceptionFilter {
       exception instanceof Error ? exception.stack : '',
     );
 
-    response.status(status).json({
+    const responseBody: any = {
       statusCode: status,
       timestamp: new Date().toISOString(),
       path: request.url,
       message,
-    });
+    };
+
+    if (details) {
+      responseBody.errors = details;
+    }
+
+    response.status(status).json(responseBody);
   }
 }
