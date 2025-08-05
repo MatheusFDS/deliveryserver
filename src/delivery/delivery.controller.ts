@@ -8,23 +8,16 @@ import {
   Delete,
   UseGuards,
   Req,
-  BadRequestException,
-  HttpCode,
-  HttpStatus,
+  Query,
+  DefaultValuePipe,
+  ParseIntPipe,
 } from '@nestjs/common';
 import { DeliveryService } from './delivery.service';
 import { CreateDeliveryDto } from './dto/create-delivery.dto';
 import { UpdateDeliveryDto } from './dto/update-delivery.dto';
-import { RejeitarRoteiroDto } from './dto/reject-delivery.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
-import { OrderStatus } from '../types/status.enum';
-
-export class CalculateFreightDto {
-  orderIds: string[];
-  vehicleId: string;
-}
 
 @Controller('delivery')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -33,49 +26,43 @@ export class DeliveryController {
 
   @Post()
   @Roles('admin', 'user')
-  async create(@Body() createDeliveryDto: CreateDeliveryDto, @Req() req) {
+  create(@Body() createDeliveryDto: CreateDeliveryDto, @Req() req) {
     const userId = req.user.userId;
     return this.deliveryService.create(createDeliveryDto, userId);
   }
 
-  @Post('calculate-freight-preview')
-  @Roles('admin', 'user')
-  async calculateFreightPreview(
-    @Body() calculateFreightDto: CalculateFreightDto,
+  @Get()
+  @Roles('admin', 'user', 'driver')
+  findAll(
     @Req() req,
+    @Query('search') search?: string,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+    @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number = 1,
+    @Query('pageSize', new DefaultValuePipe(10), ParseIntPipe)
+    pageSize: number = 10,
   ) {
     const userId = req.user.userId;
-    return this.deliveryService.calculateFreightPreview(
-      calculateFreightDto,
+    return this.deliveryService.findAll(
       userId,
+      search,
+      startDate,
+      endDate,
+      page,
+      pageSize,
     );
-  }
-
-  @Get()
-  @Roles('admin', 'driver', 'user')
-  async findAll(@Req() req) {
-    const userId = req.user.userId;
-    const userRole = req.user.role;
-    // Passa o userId e a role para o serviço lidar com a lógica de filtragem para motoristas
-    return this.deliveryService.findAllByUserIdAndRole(userId, userRole);
   }
 
   @Get(':id')
-  @Roles('admin', 'driver', 'user')
-  async findOne(@Param('id') id: string, @Req() req) {
+  @Roles('admin', 'user', 'driver')
+  findOne(@Param('id') id: string, @Req() req) {
     const userId = req.user.userId;
-    const userRole = req.user.role;
-    // Passa userId e role para o serviço lidar com a lógica de acesso do motorista
-    return this.deliveryService.findOneByIdAndUserIdAndRole(
-      id,
-      userId,
-      userRole,
-    );
+    return this.deliveryService.findOne(id, userId);
   }
 
   @Patch(':id')
   @Roles('admin', 'user')
-  async update(
+  update(
     @Param('id') id: string,
     @Body() updateDeliveryDto: UpdateDeliveryDto,
     @Req() req,
@@ -86,80 +73,69 @@ export class DeliveryController {
 
   @Delete(':id')
   @Roles('admin', 'user')
-  @HttpCode(HttpStatus.OK)
-  async remove(@Param('id') id: string, @Req() req) {
+  remove(@Param('id') id: string, @Req() req) {
     const userId = req.user.userId;
     return this.deliveryService.remove(id, userId);
   }
 
-  @Patch(':id/remove-order/:orderId')
+  @Post('/calculate-freight-preview')
   @Roles('admin', 'user')
-  async removeOrderFromDelivery(
-    @Param('id') deliveryId: string,
-    @Param('orderId') orderId: string,
+  calculateFreightPreview(
+    @Body() data: { orderIds: string[]; vehicleId: string },
     @Req() req,
   ) {
     const userId = req.user.userId;
-    return this.deliveryService.removeOrderFromDelivery(
-      deliveryId,
-      orderId,
-      userId,
-    );
+    return this.deliveryService.calculateFreightPreview(data, userId);
   }
 
-  @Patch('order/:orderId/status')
+  @Patch(':id/liberar')
+  @Roles('admin', 'user')
+  approveDelivery(@Param('id') id: string, @Req() req) {
+    const userId = req.user.userId;
+    return this.deliveryService.liberarRoteiro(id, userId);
+  }
+
+  @Patch(':id/rejeitar')
+  @Roles('admin', 'user')
+  rejectDelivery(
+    @Param('id') id: string,
+    @Body('motivo') motivo: string,
+    @Req() req,
+  ) {
+    const userId = req.user.userId;
+    return this.deliveryService.rejeitarRoteiro(id, userId, motivo);
+  }
+
+  @Patch('/order/:orderId/status')
   @Roles('driver')
-  async updateOrderStatus(
+  updateOrderStatus(
     @Param('orderId') orderId: string,
     @Body()
     body: {
-      status:
-        | OrderStatus.EM_ENTREGA
-        | OrderStatus.ENTREGUE
-        | OrderStatus.NAO_ENTREGUE;
+      status: any;
       motivoNaoEntrega?: string;
       codigoMotivoNaoEntrega?: string;
     },
     @Req() req,
   ) {
-    const userId = req.user.userId; // Obtém userId do token
-    // A validação de driverId será movida para o serviço
-    if (!body.status)
-      throw new BadRequestException('Novo status do pedido é obrigatório.');
-    if (body.status === OrderStatus.NAO_ENTREGUE && !body.motivoNaoEntrega) {
-      throw new BadRequestException(
-        'Motivo da não entrega é obrigatório para o status "Não entregue".',
-      );
-    }
-
+    const userId = req.user.userId;
     return this.deliveryService.updateOrderStatus(
       orderId,
       body.status,
-      userId, // Passa userId
+      userId,
       body.motivoNaoEntrega,
       body.codigoMotivoNaoEntrega,
     );
   }
 
-  @Patch(':id/liberar')
-  @Roles('admin')
-  async liberarRoteiro(@Param('id') deliveryId: string, @Req() req) {
-    const userId = req.user.userId;
-    return this.deliveryService.liberarRoteiro(deliveryId, userId);
-  }
-
-  @Patch(':id/rejeitar')
-  @Roles('admin')
-  async rejeitarRoteiro(
-    @Param('id') deliveryId: string,
-    @Body() rejeitarRoteiroDto: RejeitarRoteiroDto,
+  @Patch(':id/remove-order/:orderId')
+  @Roles('admin', 'user')
+  removeOrderFromDelivery(
+    @Param('id') id: string,
+    @Param('orderId') orderId: string,
     @Req() req,
   ) {
     const userId = req.user.userId;
-    return this.deliveryService.rejeitarRoteiro(
-      deliveryId,
-      userId,
-      rejeitarRoteiroDto.motivo,
-    );
+    return this.deliveryService.removeOrderFromDelivery(id, orderId, userId);
   }
 }

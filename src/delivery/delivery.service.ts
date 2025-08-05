@@ -5,6 +5,7 @@ import {
   ConflictException,
   ForbiddenException,
   UnauthorizedException,
+  InternalServerErrorException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateDeliveryDto } from './dto/create-delivery.dto';
@@ -14,7 +15,8 @@ import {
   DeliveryStatus,
   ApprovalAction,
 } from '../types/status.enum';
-import { Order, Tenant } from '@prisma/client';
+import { Order, Tenant, Prisma } from '@prisma/client';
+import { startOfDay, endOfDay } from 'date-fns';
 
 @Injectable()
 export class DeliveryService {
@@ -194,59 +196,71 @@ export class DeliveryService {
       ? OrderStatus.EM_ROTA_AGUARDANDO_LIBERACAO
       : OrderStatus.EM_ROTA;
 
-    const result = await this.prisma.$transaction(async (tx) => {
-      const delivery = await tx.delivery.create({
-        data: {
-          motoristaId,
-          veiculoId,
-          tenantId,
-          valorFrete,
-          totalPeso,
-          totalValor,
-          status: initialDeliveryStatus,
-          dataInicio: dataInicio ? new Date(dataInicio) : new Date(),
-          observacao: observacao || '',
-          orders: {
-            connect: orderReferences.map((order) => ({ id: order.id })),
-          },
-        },
-        include: { orders: true, Driver: true, Vehicle: true },
-      });
-
-      await tx.order.updateMany({
-        where: { id: { in: orderIds } },
-        data: {
-          status: initialOrderStatus,
-          deliveryId: delivery.id,
-          startedAt: null,
-          completedAt: null,
-          motivoNaoEntrega: null,
-          codigoMotivoNaoEntrega: null,
-        },
-      });
-
-      for (const orderRef of orderReferences) {
-        await tx.order.update({
-          where: { id: orderRef.id },
+    try {
+      const result = await this.prisma.$transaction(async (tx) => {
+        const delivery = await tx.delivery.create({
           data: {
-            sorting: orderRef.sorting !== undefined ? orderRef.sorting : null,
+            motoristaId,
+            veiculoId,
+            tenantId,
+            valorFrete,
+            totalPeso,
+            totalValor,
+            status: initialDeliveryStatus,
+            dataInicio: dataInicio ? new Date(dataInicio) : new Date(),
+            observacao: observacao || '',
+            orders: {
+              connect: orderReferences.map((order) => ({ id: order.id })),
+            },
+          },
+          include: { orders: true, Driver: true, Vehicle: true },
+        });
+
+        await tx.order.updateMany({
+          where: { id: { in: orderIds } },
+          data: {
+            status: initialOrderStatus,
+            deliveryId: delivery.id,
+            startedAt: null,
+            completedAt: null,
+            motivoNaoEntrega: null,
+            codigoMotivoNaoEntrega: null,
           },
         });
+
+        for (const orderRef of orderReferences) {
+          await tx.order.update({
+            where: { id: orderRef.id },
+            data: {
+              sorting: orderRef.sorting !== undefined ? orderRef.sorting : null,
+            },
+          });
+        }
+        return delivery;
+      });
+
+      let message = `Roteiro criado com status '${initialDeliveryStatus}'.`;
+      if (approvalCheck.needsApproval) {
+        message += ` Necessita liberação pelos seguintes motivos: ${approvalCheck.reasons.join('; ')}`;
       }
-      return delivery;
-    });
 
-    let message = `Roteiro criado com status '${initialDeliveryStatus}'.`;
-    if (approvalCheck.needsApproval) {
-      message += ` Necessita liberação pelos seguintes motivos: ${approvalCheck.reasons.join('; ')}`;
+      return {
+        message,
+        delivery: result,
+        needsApproval: approvalCheck.needsApproval,
+        approvalReasons: approvalCheck.reasons,
+      };
+    } catch (error) {
+      if (
+        error instanceof BadRequestException ||
+        error instanceof NotFoundException ||
+        error instanceof ConflictException
+      )
+        throw error;
+      throw new InternalServerErrorException(
+        'Erro inesperado ao criar a entrega.',
+      );
     }
-
-    return {
-      message,
-      delivery: result,
-      needsApproval: approvalCheck.needsApproval,
-      approvalReasons: approvalCheck.reasons,
-    };
   }
 
   async calculateFreightPreview(
@@ -310,13 +324,118 @@ export class DeliveryService {
       where: { id: veiculoId },
       include: { Category: true },
     });
-    // Adicionar verificação de tenantId para o veículo também aqui, para segurança extra
     if (!vehicle || vehicle.tenantId !== tenantId) {
       throw new BadRequestException(
         'Veículo não encontrado ou não pertence ao seu tenant.',
       );
     }
     return maxDirectionValue + (vehicle?.Category?.valor ?? 0);
+  }
+
+  async findAll(
+    userId: string,
+    search?: string,
+    startDate?: string,
+    endDate?: string,
+    page: number = 1,
+    pageSize: number = 10,
+  ) {
+    const tenantId = await this.getTenantIdFromUserId(userId);
+    const skip = (page - 1) * pageSize;
+    const take = pageSize;
+
+    const where: Prisma.DeliveryWhereInput = { tenantId };
+
+    if (search) {
+      where.OR = [
+        { id: { contains: search, mode: 'insensitive' } },
+        { Driver: { name: { contains: search, mode: 'insensitive' } } },
+        { Vehicle: { plate: { contains: search, mode: 'insensitive' } } },
+        { status: { contains: search, mode: 'insensitive' } },
+      ];
+    }
+
+    if (startDate && endDate) {
+      try {
+        where.dataInicio = {
+          gte: startOfDay(new Date(startDate)),
+          lte: endOfDay(new Date(endDate)),
+        };
+      } catch (e) {
+        throw new BadRequestException(
+          'Formato de data inválido para o período.',
+        );
+      }
+    }
+
+    try {
+      const [deliveries, total] = await this.prisma.$transaction([
+        this.prisma.delivery.findMany({
+          where,
+          skip,
+          take,
+          include: {
+            Driver: { select: { name: true } },
+            Vehicle: { select: { model: true, plate: true } },
+            orders: true,
+          },
+          orderBy: { dataInicio: 'desc' },
+        }),
+        this.prisma.delivery.count({ where }),
+      ]);
+
+      return {
+        data: deliveries,
+        total,
+        page,
+        pageSize,
+        lastPage: Math.ceil(total / pageSize),
+      };
+    } catch (error) {
+      throw new InternalServerErrorException('Erro ao buscar as entregas.');
+    }
+  }
+
+  async findAllByTenantList(userId: string) {
+    const tenantId = await this.getTenantIdFromUserId(userId);
+    try {
+      return this.prisma.delivery.findMany({
+        where: { tenantId },
+        include: {
+          Driver: { select: { name: true } },
+          Vehicle: { select: { model: true, plate: true } },
+          orders: true,
+        },
+        orderBy: { dataInicio: 'desc' },
+      });
+    } catch (error) {
+      throw new InternalServerErrorException(
+        'Erro ao buscar a lista de entregas.',
+      );
+    }
+  }
+
+  async findOne(id: string, userId: string) {
+    const tenantId = await this.getTenantIdFromUserId(userId);
+    const delivery = await this.prisma.delivery.findFirst({
+      where: { id, tenantId },
+      include: {
+        Driver: true,
+        Vehicle: true,
+        orders: { orderBy: { sorting: 'asc' } },
+        approvals: {
+          include: { User: { select: { name: true } } },
+          orderBy: { createdAt: 'desc' },
+        },
+      },
+    });
+
+    if (!delivery) {
+      throw new NotFoundException(
+        `Entrega com ID ${id} não encontrada ou não pertence à sua empresa.`,
+      );
+    }
+    return delivery;
   }
 
   async liberarRoteiro(deliveryId: string, userId: string) {
@@ -435,12 +554,12 @@ export class DeliveryService {
       | OrderStatus.EM_ENTREGA
       | OrderStatus.ENTREGUE
       | OrderStatus.NAO_ENTREGUE,
-    userId: string, // Recebe userId do controller
+    userId: string,
     motivoNaoEntrega?: string,
     codigoMotivoNaoEntrega?: string,
   ) {
-    const driver = await this.getDriverByUserId(userId); // Obtém driverId e tenantId do usuário logado
-    const tenantId = driver.tenantId; // tenantId seguro
+    const driver = await this.getDriverByUserId(userId);
+    const tenantId = driver.tenantId;
 
     if (
       ![
@@ -453,7 +572,7 @@ export class DeliveryService {
     }
 
     const order = await this.prisma.order.findFirst({
-      where: { id: orderId, tenantId }, // Filtra por tenantId
+      where: { id: orderId, tenantId },
       include: { Delivery: true },
     });
 
@@ -471,7 +590,6 @@ export class DeliveryService {
       );
     }
     if (order.Delivery.motoristaId !== driver.id) {
-      // Usa driver.id (do usuário logado)
       throw new ForbiddenException(
         'Motorista não autorizado para este roteiro.',
       );
@@ -487,7 +605,7 @@ export class DeliveryService {
     const updateData: any = {
       status: newStatus,
       updatedAt: new Date(),
-      driverId: driver.id, // Define o driverId com base no usuário logado
+      driverId: driver.id,
     };
 
     if (newStatus === OrderStatus.EM_ENTREGA) {
@@ -822,7 +940,7 @@ export class DeliveryService {
 
     if (userRole === 'driver') {
       const driver = await this.getDriverByUserId(userId);
-      whereClause.motoristaId = driver.id; // Garante que o motorista só acesse seus próprios roteiros
+      whereClause.motoristaId = driver.id;
     }
 
     const delivery = await this.prisma.delivery.findFirst({
@@ -848,7 +966,7 @@ export class DeliveryService {
       id,
       userId,
       'admin',
-    ); // Passa 'admin' aqui para ignorar a restrição de motorista no findOne
+    );
 
     if (delivery.status === DeliveryStatus.INICIADO) {
       const hasNonFinalizedOrders = delivery.orders.some(
@@ -867,7 +985,7 @@ export class DeliveryService {
       where: {
         paymentDeliveries: { some: { deliveryId: id } },
         status: 'Baixado',
-        tenantId, // Filtra por tenantId para segurança
+        tenantId,
       },
     });
     if (hasPayments)
@@ -877,7 +995,7 @@ export class DeliveryService {
 
     await this.prisma.$transaction(async (tx) => {
       await tx.order.updateMany({
-        where: { deliveryId: id, tenantId }, // Filtra por tenantId
+        where: { deliveryId: id, tenantId },
         data: {
           status: OrderStatus.SEM_ROTA,
           deliveryId: null,
@@ -890,9 +1008,9 @@ export class DeliveryService {
       });
       await tx.paymentDelivery.deleteMany({
         where: { deliveryId: id, tenantId },
-      }); // Filtra por tenantId
-      await tx.approval.deleteMany({ where: { deliveryId: id, tenantId } }); // Filtra por tenantId
-      await tx.delivery.delete({ where: { id, tenantId } }); // Filtra por tenantId
+      });
+      await tx.approval.deleteMany({ where: { deliveryId: id, tenantId } });
+      await tx.delivery.delete({ where: { id, tenantId } });
     });
 
     return {
@@ -946,7 +1064,7 @@ export class DeliveryService {
 
     const updatedDelivery = await this.prisma.$transaction(async (tx) => {
       await tx.order.update({
-        where: { id: orderId, tenantId }, // Filtra por tenantId
+        where: { id: orderId, tenantId },
         data: {
           status: OrderStatus.SEM_ROTA,
           deliveryId: null,
@@ -959,7 +1077,7 @@ export class DeliveryService {
       });
 
       const deliveryAfterUpdate = await tx.delivery.update({
-        where: { id: deliveryId, tenantId }, // Filtra por tenantId
+        where: { id: deliveryId, tenantId },
         data: { orders: { disconnect: { id: orderId } } },
         include: { orders: { orderBy: { sorting: 'asc' } } },
       });
@@ -1007,7 +1125,7 @@ export class DeliveryService {
                 deliveryId: deliveryId,
                 status: OrderStatus.EM_ROTA,
                 tenantId,
-              }, // Filtra por tenantId
+              },
               data: { status: OrderStatus.EM_ROTA_AGUARDANDO_LIBERACAO },
             });
             await tx.approval.create({

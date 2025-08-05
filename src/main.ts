@@ -11,7 +11,7 @@ async function bootstrap() {
 
   const allowedOrigins = [
     'https://deliveryweb-production.up.railway.app',
-    'http://localhost:8080',
+    'http://localhost:3000',
     'http://10.250.13.156:8080',
   ];
 
