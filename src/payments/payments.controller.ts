@@ -1,89 +1,88 @@
 import {
   Controller,
+  Get,
   Post,
   Body,
+  Patch,
+  Param,
   UseGuards,
   Req,
-  Get,
-  Patch,
-  Delete,
-  Param,
+  Query,
+  DefaultValuePipe,
+  ParseIntPipe,
 } from '@nestjs/common';
 import { PaymentsService } from './payments.service';
 import { CreatePaymentDto } from './dto/create-payment.dto';
-import { UpdatePaymentDto } from './dto/update-payment.dto';
 import { CreateGroupPaymentDto } from './dto/create-group-payment.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { Request } from 'express';
+import { RolesGuard } from '../auth/roles.guard';
+import { Roles } from '../auth/roles.decorator';
+import { PaymentStatus } from '../types/status.enum';
 
 @Controller('payments')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
 export class PaymentsController {
   constructor(private readonly paymentsService: PaymentsService) {}
 
   @Post()
-  async create(
-    @Body() createPaymentDto: CreatePaymentDto,
-    @Req() req: Request,
-  ) {
-    const userId = (req.user as any).userId; // Obtém userId do token
-    return await this.paymentsService.create(createPaymentDto, userId); // Passa userId em vez de tenantId
+  @Roles('admin', 'user')
+  create(@Body() createPaymentDto: CreatePaymentDto, @Req() req) {
+    const userId = req.user.userId;
+    return this.paymentsService.create(createPaymentDto, userId);
   }
 
   @Get()
-  async findAll(@Req() req: Request) {
-    const userId = (req.user as any).userId; // Obtém userId do token
-    return this.paymentsService.findAllByUserId(userId); // Passa userId em vez de tenantId
-  }
-
-  @Get(':id')
-  async findOne(@Param('id') id: string, @Req() req: Request) {
-    const userId = (req.user as any).userId; // Obtém userId do token
-    return this.paymentsService.findOneByIdAndUserId(id, userId); // Passa userId em vez de tenantId
-  }
-
-  @Patch(':id')
-  async update(
-    @Param('id') id: string,
-    @Body() updatePaymentDto: UpdatePaymentDto,
-    @Req() req: Request,
+  @Roles('admin', 'user')
+  findAll(
+    @Req() req,
+    @Query('search') search?: string,
+    @Query('status') status?: PaymentStatus,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+    @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number = 1,
+    @Query('pageSize', new DefaultValuePipe(10), ParseIntPipe)
+    pageSize: number = 10,
   ) {
-    const userId = (req.user as any).userId; // Obtém userId do token
-    return this.paymentsService.update(id, updatePaymentDto, userId); // Passa userId em vez de tenantId
-  }
-
-  @Patch(':id/status')
-  async updateStatus(
-    @Param('id') id: string,
-    @Body() { status }: { status: string },
-    @Req() req: Request,
-  ) {
-    const userId = (req.user as any).userId; // Obtém userId do token
-    const updatePaymentDto: UpdatePaymentDto = { status };
-    return this.paymentsService.update(id, updatePaymentDto, userId); // Passa userId em vez de tenantId
-  }
-
-  @Delete(':id')
-  async remove(@Param('id') id: string, @Req() req: Request) {
-    const userId = (req.user as any).userId; // Obtém userId do token
-    return this.paymentsService.remove(id, userId); // Passa userId em vez de tenantId
+    const userId = req.user.userId;
+    return this.paymentsService.findAllByUserId(
+      userId,
+      search,
+      status,
+      startDate,
+      endDate,
+      page,
+      pageSize,
+    );
   }
 
   @Post('group')
-  async groupPayments(
+  @Roles('admin', 'user')
+  groupPayments(
     @Body() createGroupPaymentDto: CreateGroupPaymentDto,
-    @Req() req: Request,
+    @Req() req,
   ) {
-    const userId = (req.user as any).userId; // Obtém userId do token
-    return await this.paymentsService.groupPayments(
+    const userId = req.user.userId;
+    return this.paymentsService.groupPayments(
       createGroupPaymentDto.paymentIds,
-      userId, // Passa userId em vez de tenantId
+      userId,
     );
   }
 
   @Post('ungroup/:id')
-  async ungroupPayments(@Param('id') id: string, @Req() req: Request) {
-    const userId = (req.user as any).userId; // Obtém userId do token
-    return await this.paymentsService.ungroupPayments(id, userId); // Passa userId em vez de tenantId
+  @Roles('admin', 'user')
+  ungroupPayments(@Param('id') id: string, @Req() req) {
+    const userId = req.user.userId;
+    return this.paymentsService.ungroupPayments(id, userId);
+  }
+
+  @Patch(':id/status')
+  @Roles('admin', 'user')
+  updatePaymentStatus(
+    @Param('id') id: string,
+    @Body('status') status: PaymentStatus,
+    @Req() req,
+  ) {
+    const userId = req.user.userId;
+    return this.paymentsService.updateStatus(id, status, userId);
   }
 }

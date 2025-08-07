@@ -36,6 +36,7 @@ export class DeliveryController {
   findAll(
     @Req() req,
     @Query('search') search?: string,
+    @Query('status') status?: string, // <-- ADICIONADO AQUI
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string,
     @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number = 1,
@@ -46,6 +47,7 @@ export class DeliveryController {
     return this.deliveryService.findAll(
       userId,
       search,
+      status, // <-- E AQUI
       startDate,
       endDate,
       page,

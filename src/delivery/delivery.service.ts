@@ -75,18 +75,24 @@ export class DeliveryService {
       const freightPercentage = (valorFrete / totalValor) * 100;
       if (freightPercentage > tenant.minDeliveryPercentage) {
         reasons.push(
-          `Percentual de frete (${freightPercentage.toFixed(2)}%) acima do máximo permitido (${tenant.minDeliveryPercentage}%).`,
+          `Percentual de frete (${freightPercentage.toFixed(
+            2,
+          )}%) acima do máximo permitido (${tenant.minDeliveryPercentage}%).`,
         );
       }
     }
     if (tenant.minValue !== null && totalValor < tenant.minValue) {
       reasons.push(
-        `Valor total da mercadoria (R$ ${totalValor.toFixed(2)}) abaixo do mínimo exigido (R$ ${tenant.minValue.toFixed(2)}).`,
+        `Valor total da mercadoria (R$ ${totalValor.toFixed(
+          2,
+        )}) abaixo do mínimo exigido (R$ ${tenant.minValue.toFixed(2)}).`,
       );
     }
     if (tenant.minPeso !== null && totalPeso < tenant.minPeso) {
       reasons.push(
-        `Peso total (${totalPeso.toFixed(2)} kg) abaixo do mínimo exigido (${tenant.minPeso.toFixed(2)} kg).`,
+        `Peso total (${totalPeso.toFixed(
+          2,
+        )} kg) abaixo do mínimo exigido (${tenant.minPeso.toFixed(2)} kg).`,
       );
     }
     if (tenant.minOrders !== null && ordersCount < tenant.minOrders) {
@@ -151,7 +157,9 @@ export class DeliveryService {
       const foundIds = orderRecords.map((o) => o.id);
       const notFoundIds = orderIds.filter((id) => !foundIds.includes(id));
       throw new BadRequestException(
-        `Pedidos não encontrados ou não pertencem ao tenant: ${notFoundIds.join(', ')}.`,
+        `Pedidos não encontrados ou não pertencem ao tenant: ${notFoundIds.join(
+          ', ',
+        )}.`,
       );
     }
 
@@ -241,7 +249,9 @@ export class DeliveryService {
 
       let message = `Roteiro criado com status '${initialDeliveryStatus}'.`;
       if (approvalCheck.needsApproval) {
-        message += ` Necessita liberação pelos seguintes motivos: ${approvalCheck.reasons.join('; ')}`;
+        message += ` Necessita liberação pelos seguintes motivos: ${approvalCheck.reasons.join(
+          '; ',
+        )}`;
       }
 
       return {
@@ -335,6 +345,7 @@ export class DeliveryService {
   async findAll(
     userId: string,
     search?: string,
+    status?: string,
     startDate?: string,
     endDate?: string,
     page: number = 1,
@@ -351,8 +362,11 @@ export class DeliveryService {
         { id: { contains: search, mode: 'insensitive' } },
         { Driver: { name: { contains: search, mode: 'insensitive' } } },
         { Vehicle: { plate: { contains: search, mode: 'insensitive' } } },
-        { status: { contains: search, mode: 'insensitive' } },
       ];
+    }
+
+    if (status) {
+      where.status = status;
     }
 
     if (startDate && endDate) {
@@ -878,7 +892,9 @@ export class DeliveryService {
               tenantId,
               userId,
               action: 'RE_APPROVAL_NEEDED',
-              motivo: `Alterações no roteiro (${approvalCheckAfterUpdate.reasons.join('; ')}) exigem nova liberação.`,
+              motivo: `Alterações no roteiro (${approvalCheckAfterUpdate.reasons.join(
+                '; ',
+              )}) exigem nova liberação.`,
               createdAt: new Date(),
             },
           });
@@ -1134,7 +1150,11 @@ export class DeliveryService {
                 tenantId,
                 userId,
                 action: 'RE_APPROVAL_NEEDED',
-                motivo: `Remoção do pedido ${order.numero} fez o roteiro (${approvalCheckAfterUpdate.reasons.join('; ')}) exigir nova liberação.`,
+                motivo: `Remoção do pedido ${
+                  order.numero
+                } fez o roteiro (${approvalCheckAfterUpdate.reasons.join(
+                  '; ',
+                )}) exigir nova liberação.`,
                 createdAt: new Date(),
               },
             });

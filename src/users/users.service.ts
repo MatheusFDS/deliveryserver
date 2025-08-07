@@ -81,12 +81,24 @@ export class UsersService {
       );
     }
 
-    const existingUser = await this.prisma.user.findFirst({
+    const existingUserByEmail = await this.prisma.user.findFirst({
       where: { email: data.email, tenantId: requestingUserTenantId },
     });
-    if (existingUser) {
+    if (existingUserByEmail) {
       throw new ConflictException(
         'Já existe um usuário com este email na sua empresa.',
+      );
+    }
+
+    const existingUserByName = await this.prisma.user.findFirst({
+      where: {
+        name: { equals: data.name, mode: 'insensitive' },
+        tenantId: requestingUserTenantId,
+      },
+    });
+    if (existingUserByName) {
+      throw new ConflictException(
+        `Já existe um usuário com o nome "${data.name}" na sua empresa.`,
       );
     }
 
@@ -260,6 +272,21 @@ export class UsersService {
       }
     }
 
+    if (updateUserDto.name && updateUserDto.name !== userToUpdate.name) {
+      const existingUserByName = await this.prisma.user.findFirst({
+        where: {
+          name: { equals: updateUserDto.name, mode: 'insensitive' },
+          tenantId: requestingUserTenantId,
+          id: { not: id },
+        },
+      });
+      if (existingUserByName) {
+        throw new ConflictException(
+          `Já existe um usuário com o nome "${updateUserDto.name}" na sua empresa.`,
+        );
+      }
+    }
+
     const { password, ...updateData } = updateUserDto;
 
     if (password) {
@@ -347,7 +374,9 @@ export class UsersService {
     });
     if (existingUser) {
       throw new ConflictException(
-        `Já existe um usuário com este email para ${targetTenantId ? 'o tenant especificado' : 'a plataforma'}.`,
+        `Já existe um usuário com este email para ${
+          targetTenantId ? 'o tenant especificado' : 'a plataforma'
+        }.`,
       );
     }
 

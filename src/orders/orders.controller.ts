@@ -30,6 +30,7 @@ export class OrdersController {
   async findAll(
     @Req() req,
     @Query('search') search?: string,
+    @Query('status') status?: string, // <-- ADICIONADO AQUI
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string,
     @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number = 1,
@@ -40,6 +41,7 @@ export class OrdersController {
     return this.ordersService.findAllByUserId(
       userId,
       search,
+      status, // <-- E AQUI
       startDate,
       endDate,
       page,

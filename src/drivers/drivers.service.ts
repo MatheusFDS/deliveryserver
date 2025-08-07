@@ -44,6 +44,18 @@ export class DriversService {
   async create(createDriverDto: CreateDriverDto, userId: string) {
     const tenantId = await this.getTenantIdFromUserId(userId);
 
+    const existingDriverWithName = await this.prisma.driver.findFirst({
+      where: {
+        name: { equals: createDriverDto.name, mode: 'insensitive' },
+        tenantId,
+      },
+    });
+    if (existingDriverWithName) {
+      throw new ConflictException(
+        `Já existe um motorista com o nome "${createDriverDto.name}" nesta empresa.`,
+      );
+    }
+
     const existingDriverWithCpf = await this.prisma.driver.findFirst({
       where: { cpf: createDriverDto.cpf, tenantId },
     });
@@ -194,6 +206,21 @@ export class DriversService {
       throw new NotFoundException(
         'Motorista não encontrado ou não pertence à sua empresa.',
       );
+    }
+
+    if (updateDriverDto.name && updateDriverDto.name !== driver.name) {
+      const existingDriverWithName = await this.prisma.driver.findFirst({
+        where: {
+          name: { equals: updateDriverDto.name, mode: 'insensitive' },
+          tenantId,
+          id: { not: id },
+        },
+      });
+      if (existingDriverWithName) {
+        throw new ConflictException(
+          `Já existe outro motorista com o nome "${updateDriverDto.name}" nesta empresa.`,
+        );
+      }
     }
 
     if (updateDriverDto.cpf && updateDriverDto.cpf !== driver.cpf) {

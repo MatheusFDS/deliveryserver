@@ -32,9 +32,9 @@ export class DirectionsService {
     rangeFim: string,
     currentId?: string,
   ) {
-    if (rangeInicio >= rangeFim) {
+    if (rangeInicio > rangeFim) {
       throw new BadRequestException(
-        'O CEP inicial deve ser menor que o CEP final.',
+        'O CEP inicial deve ser menor ou igual ao CEP final.',
       );
     }
 
@@ -62,6 +62,18 @@ export class DirectionsService {
   async create(createDirectionsDto: CreateDirectionsDto, userId: string) {
     const tenantId = await this.getTenantIdFromUserId(userId);
 
+    const existingRegion = await this.prisma.directions.findFirst({
+      where: {
+        regiao: { equals: createDirectionsDto.regiao, mode: 'insensitive' },
+        tenantId,
+      },
+    });
+    if (existingRegion) {
+      throw new ConflictException(
+        `Já existe uma região com o nome "${createDirectionsDto.regiao}".`,
+      );
+    }
+
     await this.checkOverlap(
       tenantId,
       createDirectionsDto.rangeInicio,
@@ -77,7 +89,7 @@ export class DirectionsService {
       });
     } catch (error) {
       throw new InternalServerErrorException(
-        'Erro inesperado ao criar a direção.',
+        'Erro inesperado ao criar a região.',
       );
     }
   }
@@ -118,7 +130,7 @@ export class DirectionsService {
       };
     } catch (error) {
       throw new InternalServerErrorException(
-        'Erro inesperado ao buscar as direções.',
+        'Erro inesperado ao buscar as regiões.',
       );
     }
   }
@@ -132,7 +144,7 @@ export class DirectionsService {
       });
     } catch (error) {
       throw new InternalServerErrorException(
-        'Erro inesperado ao buscar todas as direções.',
+        'Erro inesperado ao buscar todas as regiões.',
       );
     }
   }
@@ -144,7 +156,7 @@ export class DirectionsService {
     });
     if (!direction) {
       throw new NotFoundException(
-        'Direção não encontrada ou não pertence à sua empresa.',
+        'Região não encontrada ou não pertence à sua empresa.',
       );
     }
     return direction;
@@ -161,8 +173,26 @@ export class DirectionsService {
     });
     if (!existingDirection) {
       throw new NotFoundException(
-        'Direção não encontrada ou não pertence à sua empresa.',
+        'Região não encontrada ou não pertence à sua empresa.',
       );
+    }
+
+    if (
+      updateDirectionsDto.regiao &&
+      updateDirectionsDto.regiao !== existingDirection.regiao
+    ) {
+      const existingRegion = await this.prisma.directions.findFirst({
+        where: {
+          regiao: { equals: updateDirectionsDto.regiao, mode: 'insensitive' },
+          tenantId,
+          id: { not: id },
+        },
+      });
+      if (existingRegion) {
+        throw new ConflictException(
+          `Já existe outra região com o nome "${updateDirectionsDto.regiao}".`,
+        );
+      }
     }
 
     const newRangeInicio =
@@ -179,7 +209,7 @@ export class DirectionsService {
       });
     } catch (error) {
       throw new InternalServerErrorException(
-        'Erro inesperado ao atualizar a direção.',
+        'Erro inesperado ao atualizar a região.',
       );
     }
   }
@@ -191,7 +221,7 @@ export class DirectionsService {
     });
     if (!existingDirection) {
       throw new NotFoundException(
-        'Direção não encontrada ou não pertence à sua empresa.',
+        'Região não encontrada ou não pertence à sua empresa.',
       );
     }
 
@@ -201,7 +231,7 @@ export class DirectionsService {
       });
     } catch (error) {
       throw new InternalServerErrorException(
-        'Erro inesperado ao excluir a direção.',
+        'Erro inesperado ao excluir a região.',
       );
     }
   }

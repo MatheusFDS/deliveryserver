@@ -159,6 +159,7 @@ export class OrdersService {
   async findAllByUserId(
     userId: string,
     search?: string,
+    status?: string,
     startDate?: string,
     endDate?: string,
     page: number = 1,
@@ -176,8 +177,11 @@ export class OrdersService {
         { cliente: { contains: search, mode: 'insensitive' } },
         { cidade: { contains: search, mode: 'insensitive' } },
         { endereco: { contains: search, mode: 'insensitive' } },
-        { status: { contains: search, mode: 'insensitive' } },
       ];
+    }
+
+    if (status) {
+      where.status = status;
     }
 
     if (startDate && endDate) {
