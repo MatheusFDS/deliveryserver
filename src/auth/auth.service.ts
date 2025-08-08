@@ -4,6 +4,7 @@ import {
   NotImplementedException,
   InternalServerErrorException,
   BadRequestException,
+  Logger,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../prisma/prisma.service';
@@ -12,6 +13,8 @@ import * as bcrypt from 'bcrypt';
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
@@ -39,11 +42,7 @@ export class AuthService {
         where: { email },
         include: {
           role: true,
-          driver: {
-            select: {
-              id: true,
-            },
-          },
+          driver: { select: { id: true } },
           tenant: true,
         },
       });
@@ -53,7 +52,7 @@ export class AuthService {
         !user.password ||
         !(await bcrypt.compare(pass, user.password))
       ) {
-        throw new UnauthorizedException('Credenciais inválidas');
+        throw new UnauthorizedException('Credenciais inválidas.');
       }
 
       if (!user.isActive) {
@@ -62,14 +61,14 @@ export class AuthService {
 
       const normalizedDomain = domain ? domain.split(':')[0] : undefined;
 
-      if (user.role.name === 'superadmin' || user.role.name === 'SUPERADMIN') {
+      // Permite superadmin somente nos domínios específicos
+      if (user.role.name.toLowerCase() === 'superadmin') {
         if (
           normalizedDomain === 'deliveryweb-production.up.railway.app' ||
-          normalizedDomain === 'localhost'
+          normalizedDomain === 'localhost' ||
+          normalizedDomain === '127.0.0.1'
         ) {
-          const userWithoutPassword = { ...user };
-          delete userWithoutPassword.password;
-          return userWithoutPassword;
+          return this.removePassword(user);
         } else {
           throw new UnauthorizedException(
             'Acesso restrito para superadmin fora do domínio específico.',
@@ -77,20 +76,23 @@ export class AuthService {
         }
       }
 
-      if (user.tenantId) {
-        if (!user.tenant || !user.tenant.isActive) {
-          throw new UnauthorizedException('Tenant inativo.');
-        }
+      // Verifica tenant ativo
+      if (user.tenantId && (!user.tenant || !user.tenant.isActive)) {
+        throw new UnauthorizedException('Tenant inativo.');
       }
 
-      if (normalizedDomain === 'localhost') {
-        const userWithoutPassword = { ...user };
-        delete userWithoutPassword.password;
-        return userWithoutPassword;
+      // Libera login local (web e mobile em dev)
+      if (
+        normalizedDomain === 'localhost' ||
+        normalizedDomain === '127.0.0.1' ||
+        domain === 'localhost:8081' // mobile em desenvolvimento
+      ) {
+        return this.removePassword(user);
       }
 
+      // Verifica domínio vinculado ao tenant
       if (domain) {
-        if (!user.tenant || user.tenant.domain !== domain) {
+        if (!user.tenant || user.tenant.domain !== normalizedDomain) {
           throw new UnauthorizedException(
             'Domínio inválido ou usuário não pertence a este domínio.',
           );
@@ -103,9 +105,7 @@ export class AuthService {
         }
       }
 
-      const userWithoutPassword = { ...user };
-      delete userWithoutPassword.password;
-      return userWithoutPassword;
+      return this.removePassword(user);
     } catch (e) {
       if (
         e instanceof UnauthorizedException ||
@@ -113,6 +113,7 @@ export class AuthService {
       ) {
         throw e;
       }
+      this.logger.error('Erro ao validar usuário', e.stack || e);
       throw new InternalServerErrorException('Erro ao validar usuário.');
     }
   }
@@ -124,22 +125,24 @@ export class AuthService {
       loginDto.domain,
     );
 
+    // Bloqueia motorista sem vínculo de driverId
+    if (user.role.name.toLowerCase() === 'driver' && !user.driver) {
+      throw new UnauthorizedException(
+        'Motorista não vinculado a um registro de driver.',
+      );
+    }
+
     const payload: any = {
       email: user.email,
       sub: user.id,
       role: user.role.name,
     };
 
-    if (
-      (user.role.name === 'driver' || user.role.name === 'DRIVER') &&
-      !user.driver
-    ) {
-    }
-
     const accessToken = this.jwtService.sign(payload, {
       secret: process.env.JWT_SECRET,
       expiresIn: process.env.JWT_ACCESS_EXPIRATION,
     });
+
     const refreshToken = this.jwtService.sign(
       { sub: user.id },
       {
@@ -166,6 +169,11 @@ export class AuthService {
 
   async refreshToken(token: string) {
     try {
+      // Verifica se o token está invalidado
+      if (await this.isTokenInvalid(token)) {
+        throw new UnauthorizedException('Token de atualização inválido.');
+      }
+
       const refreshPayload = this.jwtService.verify(token, {
         secret: process.env.JWT_REFRESH_SECRET,
       });
@@ -188,6 +196,7 @@ export class AuthService {
       if (!userWithDetails.isActive) {
         throw new UnauthorizedException('Usuário inativo.');
       }
+
       if (
         userWithDetails.tenantId &&
         (!userWithDetails.tenant || !userWithDetails.tenant.isActive)
@@ -205,7 +214,19 @@ export class AuthService {
         secret: process.env.JWT_SECRET,
         expiresIn: process.env.JWT_ACCESS_EXPIRATION,
       });
-      return { access_token: newAccessToken };
+
+      const newRefreshToken = this.jwtService.sign(
+        { sub: userWithDetails.id },
+        {
+          secret: process.env.JWT_REFRESH_SECRET,
+          expiresIn: process.env.JWT_REFRESH_EXPIRATION,
+        },
+      );
+
+      return {
+        access_token: newAccessToken,
+        refresh_token: newRefreshToken,
+      };
     } catch (e) {
       throw new UnauthorizedException(
         'Token de atualização inválido ou expirado.',
@@ -215,24 +236,21 @@ export class AuthService {
 
   async logout(token: string): Promise<void> {
     try {
-      const decoded = this.jwtService.decode(token);
-      if (!decoded || !decoded.exp) {
-        return;
-      }
+      const decoded = this.jwtService.decode(token) as any;
+      if (!decoded?.exp) return;
 
       const expiresInSeconds = decoded.exp - Math.floor(Date.now() / 1000);
-      if (expiresInSeconds <= 0) {
-        return;
-      }
+      if (expiresInSeconds <= 0) return;
 
       await this.prisma.invalidatedToken.create({
         data: {
-          token: token,
+          token,
           expiresAt: new Date(decoded.exp * 1000),
           invalidatedAt: new Date(),
         },
       });
     } catch (e) {
+      this.logger.error('Erro ao processar logout', e.stack || e);
       throw new InternalServerErrorException('Falha ao processar logout.');
     }
   }
@@ -240,10 +258,10 @@ export class AuthService {
   async isTokenInvalid(token: string): Promise<boolean> {
     try {
       const invalidated = await this.prisma.invalidatedToken.findUnique({
-        where: { token: token },
+        where: { token },
       });
       return !!invalidated;
-    } catch (e) {
+    } catch {
       return true;
     }
   }
@@ -254,5 +272,11 @@ export class AuthService {
 
   async invalidateTokensForTenant(): Promise<void> {
     throw new NotImplementedException('Método não implementado.');
+  }
+
+  private removePassword(user: any) {
+    const userCopy = { ...user };
+    delete userCopy.password;
+    return userCopy;
   }
 }
