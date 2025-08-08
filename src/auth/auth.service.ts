@@ -81,16 +81,18 @@ export class AuthService {
         throw new UnauthorizedException('Tenant inativo.');
       }
 
-      // Libera login local (web e mobile em dev)
-      if (
+      // Detecta ambiente local (localhost, localhost:8081, 127.0.0.1, IP local)
+      const isLocalDev =
         normalizedDomain === 'localhost' ||
         normalizedDomain === '127.0.0.1' ||
-        domain === 'localhost:8081' // mobile em desenvolvimento
-      ) {
+        domain === 'localhost:8081' ||
+        /^192\.168\.\d+\.\d+$/.test(normalizedDomain || '');
+
+      if (isLocalDev) {
         return this.removePassword(user);
       }
 
-      // Verifica domínio vinculado ao tenant
+      // Valida domínio do tenant para ambiente não local
       if (domain) {
         if (!user.tenant || user.tenant.domain !== normalizedDomain) {
           throw new UnauthorizedException(
