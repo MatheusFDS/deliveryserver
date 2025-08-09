@@ -1,44 +1,56 @@
-// src/routes/routes.module.ts
-
-// Justificativa: O módulo foi atualizado para registrar os novos componentes
-// da nossa arquitetura de adaptadores. Ele agora declara explicitamente o
-// GoogleMapsAdapter e utiliza o arquivo de provedores para configurar a
-// injeção de dependência da nossa abstração.
-
+// =============================================================================
+// src/routes/routes.module.refactored.ts
+// =============================================================================
+// Módulo refatorado com todos os novos serviços
 import { Module, forwardRef } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthModule } from 'src/auth/auth.module';
 import { UsersModule } from 'src/users/users.module';
 import { TenantModule } from 'src/tenant/tenant.module';
+
+// Controllers e Services
 import { RoutesController } from './routes.controller';
 import { RoutesService } from './routes.service';
 
-// --- NOVAS IMPORTAÇÕES ---
+// Adapters
 import { GoogleMapsAdapter } from './adapters/google-maps.adapter';
+
+// Services
+import { CacheService } from './services/cache.service';
+import { CircuitBreakerService } from './services/circuit-breaker.service';
+import { RetryService } from './services/retry.service';
+
+// Providers
 import { routesProviders } from './providers/routes.providers';
 
 @Module({
   imports: [
     forwardRef(() => AuthModule),
-    ConfigModule, // O ConfigModule é necessário para o GoogleMapsAdapter injetar o ConfigService
+    ConfigModule,
     forwardRef(() => UsersModule),
     forwardRef(() => TenantModule),
   ],
   controllers: [RoutesController],
   providers: [
-    // 1. O serviço principal do módulo
+    // Core services
     RoutesService,
-
-    // 2. O PrismaService continua sendo uma dependência
     PrismaService,
 
-    // 3. Declaramos nossa implementação concreta como um provedor para que o NestJS a conheça.
+    // Infrastructure services
+    CacheService,
+    CircuitBreakerService,
+    RetryService,
+
+    // Adapters
     GoogleMapsAdapter,
 
-    // 4. Usamos o operador spread para adicionar nossa configuração de injeção de dependência
-    // que conecta a interface (IMapsAdapter) à classe concreta (GoogleMapsAdapter).
+    // Dependency injection configuration
     ...routesProviders,
+  ],
+  exports: [
+    RoutesService,
+    CacheService, // Exporta para outros módulos usarem
   ],
 })
 export class RoutesModule {}
