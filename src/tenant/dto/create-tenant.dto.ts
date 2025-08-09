@@ -2,8 +2,11 @@ import {
   IsString,
   IsNotEmpty,
   IsOptional,
-  MaxLength, // Para limites de string
-  IsFQDN, // Para validar o domínio
+  MaxLength,
+  IsFQDN,
+  IsBoolean,
+  IsNumber,
+  IsInt,
 } from 'class-validator';
 
 export class CreateTenantDto {
@@ -11,30 +14,53 @@ export class CreateTenantDto {
   @IsNotEmpty({ message: 'O nome do tenant é obrigatório.' })
   @MaxLength(100, {
     message: 'O nome do tenant não pode ter mais de 100 caracteres.',
-  }) // Limite de tamanho razoável para o nome do tenant
+  })
   readonly name: string;
 
   @IsOptional()
   @IsString({ message: 'O endereço do tenant deve ser uma string.' })
   @MaxLength(255, {
     message: 'O endereço do tenant não pode ter mais de 255 caracteres.',
-  }) // Limite de tamanho para endereço
+  })
   readonly address?: string;
 
   @IsOptional()
   @IsString({ message: 'O domínio do tenant deve ser uma string.' })
   @IsNotEmpty({
     message: 'O domínio do tenant não pode estar vazio se fornecido.',
-  }) // Se fornecido, não pode ser vazio
+  })
   @IsFQDN(
     { require_tld: true, allow_underscores: false },
     {
       message:
         'O domínio do tenant deve ser um nome de domínio válido e completo.',
     },
-  ) // Valida se é um FQDN (Full Qualified Domain Name)
+  )
   @MaxLength(255, {
     message: 'O domínio do tenant não pode ter mais de 255 caracteres.',
-  }) // Limite de tamanho para o domínio
+  })
   readonly domain?: string;
+
+  @IsOptional()
+  @IsBoolean({ message: 'O status ativo deve ser um valor booleano.' })
+  isActive?: boolean;
+
+  @IsOptional()
+  @IsNumber(
+    {},
+    { message: 'A porcentagem mínima de entrega deve ser numérica.' },
+  )
+  minDeliveryPercentage?: number;
+
+  @IsOptional()
+  @IsNumber({}, { message: 'O valor mínimo deve ser numérico.' })
+  minValue?: number;
+
+  @IsOptional()
+  @IsInt({ message: 'O número mínimo de pedidos deve ser um inteiro.' })
+  minOrders?: number;
+
+  @IsOptional()
+  @IsNumber({}, { message: 'O peso mínimo deve ser numérico.' })
+  minPeso?: number;
 }

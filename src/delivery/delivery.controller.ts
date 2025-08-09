@@ -18,6 +18,8 @@ import { UpdateDeliveryDto } from './dto/update-delivery.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
+// CORREÇÃO: Importar o Enum do Prisma para fazer a conversão de tipo (cast)
+import { DeliveryStatus } from '@prisma/client';
 
 @Controller('delivery')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -36,7 +38,7 @@ export class DeliveryController {
   findAll(
     @Req() req,
     @Query('search') search?: string,
-    @Query('status') status?: string, // <-- ADICIONADO AQUI
+    @Query('status') status?: string,
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string,
     @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number = 1,
@@ -47,7 +49,9 @@ export class DeliveryController {
     return this.deliveryService.findAll(
       userId,
       search,
-      status, // <-- E AQUI
+      // CORREÇÃO: Fazemos um "cast" da string para o tipo DeliveryStatus
+      // para satisfazer a tipagem do serviço.
+      status as DeliveryStatus,
       startDate,
       endDate,
       page,

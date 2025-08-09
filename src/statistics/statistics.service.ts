@@ -1,10 +1,7 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import {
-  OrderStatus,
-  DeliveryStatus,
-  PaymentStatus,
-} from '../types/status.enum';
+// CORREÇÃO: Importar Enums diretamente do Prisma Client
+import { OrderStatus, DeliveryStatus, PaymentStatus } from '@prisma/client';
 
 @Injectable()
 export class StatisticsService {
@@ -38,7 +35,6 @@ export class StatisticsService {
     startDate: Date,
     endDate: Date,
     driverId: string,
-    // CORRIGIDO: Removido 'includeDetails' pois não era usado
   ) {
     const tenantId = await this.getTenantIdFromUserId(userId);
 
@@ -79,7 +75,8 @@ export class StatisticsService {
         tenantId,
         status: PaymentStatus.PENDENTE,
         createdAt: dateFilter,
-        ...(driverId && { motoristaId: driverId }),
+        // CORREÇÃO: Renomeado para driverId
+        ...(driverId && { driverId: driverId }),
       },
     });
 
@@ -88,19 +85,23 @@ export class StatisticsService {
         tenantId,
         status: PaymentStatus.PAGO,
         createdAt: dateFilter,
-        ...(driverId && { motoristaId: driverId }),
+        // CORREÇÃO: Renomeado para driverId
+        ...(driverId && { driverId: driverId }),
       },
     });
 
     const deliveriesByDriver = await this.prisma.delivery.groupBy({
-      by: ['motoristaId'],
+      // CORREÇÃO: Renomeado para driverId
+      by: ['driverId'],
       where: {
         tenantId,
         createdAt: dateFilter,
-        ...(driverId && { motoristaId: driverId }),
+        // CORREÇÃO: Renomeado para driverId
+        ...(driverId && { driverId: driverId }),
       },
       _count: {
-        motoristaId: true,
+        // CORREÇÃO: Renomeado para driverId
+        driverId: true,
       },
     });
 
@@ -109,7 +110,8 @@ export class StatisticsService {
         tenantId,
         status: DeliveryStatus.INICIADO,
         createdAt: dateFilter,
-        ...(driverId && { motoristaId: driverId }),
+        // CORREÇÃO: Renomeado para driverId
+        ...(driverId && { driverId: driverId }),
       },
     });
 
@@ -118,7 +120,8 @@ export class StatisticsService {
         tenantId,
         status: DeliveryStatus.FINALIZADO,
         createdAt: dateFilter,
-        ...(driverId && { motoristaId: driverId }),
+        // CORREÇÃO: Renomeado para driverId
+        ...(driverId && { driverId: driverId }),
       },
     });
 
@@ -197,10 +200,12 @@ export class StatisticsService {
           gte: startDate,
           lte: endDate,
         },
-        ...(driverIdFilter && { motoristaId: driverIdFilter }),
+        // CORREÇÃO: Renomeado para driverId
+        ...(driverIdFilter && { driverId: driverIdFilter }),
       },
       select: {
-        motoristaId: true,
+        // CORREÇÃO: Renomeado para driverId
+        driverId: true,
         orders: {
           select: {
             id: true,
@@ -211,8 +216,9 @@ export class StatisticsService {
 
     const driverOrders = deliveries.reduce(
       (acc, delivery) => {
-        acc[delivery.motoristaId] =
-          (acc[delivery.motoristaId] || 0) + delivery.orders.length;
+        // CORREÇÃO: Renomeado para driverId
+        acc[delivery.driverId] =
+          (acc[delivery.driverId] || 0) + delivery.orders.length;
         return acc;
       },
       {} as Record<string, number>,
@@ -223,7 +229,8 @@ export class StatisticsService {
       average: parseFloat(
         (
           driverOrders[driverId] /
-          deliveries.filter((d) => d.motoristaId === driverId).length
+          // CORREÇÃO: Renomeado para driverId
+          deliveries.filter((d) => d.driverId === driverId).length
         ).toFixed(2),
       ),
     }));
@@ -244,10 +251,12 @@ export class StatisticsService {
           gte: startDate,
           lte: endDate,
         },
-        ...(driverIdFilter && { motoristaId: driverIdFilter }),
+        // CORREÇÃO: Renomeado para driverId
+        ...(driverIdFilter && { driverId: driverIdFilter }),
       },
       select: {
-        motoristaId: true,
+        // CORREÇÃO: Renomeado para driverId
+        driverId: true,
         orders: {
           select: {
             valor: true,
@@ -258,8 +267,9 @@ export class StatisticsService {
 
     const driverValues = deliveries.reduce(
       (acc, delivery) => {
-        acc[delivery.motoristaId] =
-          (acc[delivery.motoristaId] || 0) +
+        // CORREÇÃO: Renomeado para driverId
+        acc[delivery.driverId] =
+          (acc[delivery.driverId] || 0) +
           delivery.orders.reduce((sum, order) => sum + order.valor, 0);
         return acc;
       },
@@ -271,7 +281,8 @@ export class StatisticsService {
       average: parseFloat(
         (
           driverValues[driverId] /
-          deliveries.filter((d) => d.motoristaId === driverId).length
+          // CORREÇÃO: Renomeado para driverId
+          deliveries.filter((d) => d.driverId === driverId).length
         ).toFixed(2),
       ),
     }));
@@ -292,10 +303,12 @@ export class StatisticsService {
           gte: startDate,
           lte: endDate,
         },
-        ...(driverIdFilter && { motoristaId: driverIdFilter }),
+        // CORREÇÃO: Renomeado para driverId
+        ...(driverIdFilter && { driverId: driverIdFilter }),
       },
       select: {
-        motoristaId: true,
+        // CORREÇÃO: Renomeado para driverId
+        driverId: true,
         orders: {
           select: {
             peso: true,
@@ -306,8 +319,9 @@ export class StatisticsService {
 
     const driverWeights = deliveries.reduce(
       (acc, delivery) => {
-        acc[delivery.motoristaId] =
-          (acc[delivery.motoristaId] || 0) +
+        // CORREÇÃO: Renomeado para driverId
+        acc[delivery.driverId] =
+          (acc[delivery.driverId] || 0) +
           delivery.orders.reduce((sum, order) => sum + order.peso, 0);
         return acc;
       },
@@ -319,7 +333,8 @@ export class StatisticsService {
       average: parseFloat(
         (
           driverWeights[driverId] /
-          deliveries.filter((d) => d.motoristaId === driverId).length
+          // CORREÇÃO: Renomeado para driverId
+          deliveries.filter((d) => d.driverId === driverId).length
         ).toFixed(2),
       ),
     }));

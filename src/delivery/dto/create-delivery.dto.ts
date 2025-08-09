@@ -1,4 +1,5 @@
-// Proposta para: src/delivery/dto/create-delivery.dto.ts (Backend)
+// src/delivery/dto/create-delivery.dto.ts
+
 import {
   IsString,
   IsNotEmpty,
@@ -8,40 +9,42 @@ import {
   IsOptional,
   IsNumber,
   IsDateString,
-  IsUUID, // Adicionar para validação de UUID
+  IsUUID,
   MaxLength,
-  Min, // Adicionar para limite de caracteres
+  Min,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class OrderReferenceDto {
   @IsUUID('4', {
     message: 'O ID do pedido deve ser um UUID válido (versão 4).',
-  }) // Força que seja um UUID v4
+  })
   @IsNotEmpty({ message: 'O ID do pedido não pode estar vazio.' })
   id: string;
 
   @IsNumber(
     { allowNaN: false, allowInfinity: false, maxDecimalPlaces: 0 },
     { message: 'A ordem de classificação deve ser um número inteiro válido.' },
-  ) // Deve ser um número inteiro
+  )
   @IsOptional()
-  @Min(0, { message: 'A ordem de classificação não pode ser negativa.' }) // Permite 0 ou valores positivos
+  @Min(0, { message: 'A ordem de classificação não pode ser negativa.' })
   sorting?: number;
 }
 
 export class CreateDeliveryDto {
+  // CORREÇÃO: Renomeado de motoristaId para o padrão driverId
   @IsUUID('4', {
     message: 'O ID do motorista deve ser um UUID válido (versão 4).',
-  }) // Valida como UUID v4
+  })
   @IsNotEmpty({ message: 'O ID do motorista não pode estar vazio.' })
-  motoristaId: string;
+  driverId: string;
 
+  // CORREÇÃO: Renomeado de veiculoId para o padrão vehicleId
   @IsUUID('4', {
     message: 'O ID do veículo deve ser um UUID válido (versão 4).',
-  }) // Valida como UUID v4
+  })
   @IsNotEmpty({ message: 'O ID do veículo não pode estar vazio.' })
-  veiculoId: string;
+  vehicleId: string;
 
   @IsArray({ message: 'As ordens devem ser um array.' })
   @ArrayMinSize(1, {
@@ -55,7 +58,7 @@ export class CreateDeliveryDto {
   @IsString({ message: 'A observação deve ser uma string.' })
   @MaxLength(1000, {
     message: 'A observação não pode ter mais de 1000 caracteres.',
-  }) // Limite de tamanho razoável para observações
+  })
   observacao?: string;
 
   @IsOptional()
@@ -65,6 +68,6 @@ export class CreateDeliveryDto {
       message:
         'A data de início deve ser uma string de data ISO 8601 válida (ex: AAAA-MM-DDT00:00:00.000Z).',
     },
-  ) // Força o formato ISO 8601
+  )
   dataInicio?: string;
 }

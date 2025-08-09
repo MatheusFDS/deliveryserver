@@ -1,4 +1,4 @@
-// Conteúdo para: src/orders/dto/order-history-event.dto.ts
+// src/orders/dto/order-history-event.dto.ts
 
 import {
   IsString,
@@ -13,8 +13,10 @@ import {
   IsIn,
 } from 'class-validator';
 import { Type } from 'class-transformer';
-import { DeliveryStatus } from '../../types/status.enum';
+// CORREÇÃO: Importar o Enum diretamente do Prisma Client para consistência.
+import { DeliveryStatus } from '@prisma/client';
 
+// Este Enum é específico da lógica de histórico, então está correto mantê-lo aqui.
 export enum OrderHistoryEventType {
   PEDIDO_CRIADO = 'PEDIDO_CRIADO',
   ROTEIRO_ASSOCIADO_AGUARDANDO_LIBERACAO = 'ROTEIRO_ASSOCIADO_AGUARDANDO_LIBERACAO',
@@ -32,142 +34,99 @@ export enum OrderHistoryEventType {
   ROTEIRO_LIBERADO = 'ROTEIRO_LIBERADO',
   ROTEIRO_REJEITADO = 'ROTEIRO_REJEITADO',
   ROTEIRO_FINALIZADO = 'ROTEIRO_FINALIZADO',
-  // NOVO: Adicionado para resolver o erro
   ROTEIRO_REQUER_NOVA_LIBERACAO_PARA_PEDIDO = 'ROTEIRO_REQUER_NOVA_LIBERACAO_PARA_PEDIDO',
 }
 
-// Sub-DTO para os detalhes do evento
 export class OrderHistoryEventDetailsDto {
   @IsOptional()
   @IsString({ message: 'O status antigo deve ser uma string.' })
-  // @IsIn(Object.values(DeliveryStatus), { message: 'O status antigo não é válido.' }) // Se for status de entrega
   oldStatus?: string;
 
   @IsOptional()
   @IsString({ message: 'O novo status deve ser uma string.' })
-  // @IsIn(Object.values(DeliveryStatus), { message: 'O novo status não é válido.' }) // Se for status de entrega
   newStatus?: string;
 
   @IsOptional()
   @IsString({ message: 'O motivo deve ser uma string.' })
-  @MaxLength(500, { message: 'O motivo não pode ter mais de 500 caracteres.' })
+  @MaxLength(500)
   reason?: string;
 
   @IsOptional()
   @IsString({ message: 'O motivo de não entrega deve ser uma string.' })
-  @MaxLength(500, {
-    message: 'O motivo de não entrega não pode ter mais de 500 caracteres.',
-  })
+  @MaxLength(500)
   motivoNaoEntrega?: string;
 
   @IsOptional()
-  @IsString({
-    message: 'O código do motivo de não entrega deve ser uma string.',
-  })
-  @MaxLength(50, {
-    message:
-      'O código do motivo de não entrega não pode ter mais de 50 caracteres.',
-  })
+  @IsString()
+  @MaxLength(50)
   codigoMotivoNaoEntrega?: string;
 
   @IsOptional()
   @IsUrl({}, { message: 'A URL do comprovante deve ser uma URL válida.' })
-  @MaxLength(2048, {
-    message: 'A URL do comprovante não pode ter mais de 2048 caracteres.',
-  })
+  @MaxLength(2048)
   proofUrl?: string;
 
   @IsOptional()
-  @IsUUID('4', {
-    message: 'O ID da entrega deve ser um UUID válido (versão 4).',
-  })
+  @IsUUID('4')
   deliveryId?: string;
 
   @IsOptional()
-  @IsString({ message: 'O nome do motorista deve ser uma string.' })
-  @MaxLength(100, {
-    message: 'O nome do motorista não pode ter mais de 100 caracteres.',
-  })
+  @IsString()
+  @MaxLength(100)
   driverName?: string;
 
   @IsOptional()
-  @IsString({ message: 'A placa do veículo deve ser uma string.' })
-  @MaxLength(10, {
-    message: 'A placa do veículo não pode ter mais de 10 caracteres.',
-  })
+  @IsString()
+  @MaxLength(10)
   vehiclePlate?: string;
 
   @IsOptional()
-  @IsString({ message: 'O status da entrega deve ser uma string.' })
-  @IsIn(Object.values(DeliveryStatus), {
-    message: 'O status da entrega não é válido.',
-  })
-  deliveryStatus?: string;
+  // CORREÇÃO: Usando o Enum do Prisma para validação.
+  @IsIn(Object.values(DeliveryStatus))
+  deliveryStatus?: DeliveryStatus;
 
   @IsOptional()
-  @IsString({ message: 'A ação de aprovação deve ser uma string.' })
-  @IsIn(['APPROVED', 'REJECTED'], {
-    message: "A ação de aprovação deve ser 'APPROVED' ou 'REJECTED'.",
-  })
+  @IsString()
+  // Ações de aprovação podem ser mais variadas, string é flexível aqui.
   approvalAction?: string;
 
   @IsOptional()
-  @IsString({ message: 'O motivo da aprovação/rejeição deve ser uma string.' })
-  @MaxLength(500, {
-    message:
-      'O motivo da aprovação/rejeição não pode ter mais de 500 caracteres.',
-  })
+  @IsString()
+  @MaxLength(500)
   approvalReason?: string;
 
   @IsOptional()
-  @IsString({ message: 'O número do pedido deve ser uma string.' })
-  @MaxLength(50, {
-    message: 'O número do pedido não pode ter mais de 50 caracteres.',
-  })
+  @IsString()
+  @MaxLength(50)
   orderNumber?: string;
 
   @IsOptional()
-  @IsString({ message: 'O status final deve ser uma string.' })
-  @MaxLength(50, {
-    message: 'O status final não pode ter mais de 50 caracteres.',
-  })
+  @IsString()
+  @MaxLength(50)
   finalStatus?: string;
 }
 
 export class OrderHistoryEventDto {
-  @IsUUID('4', {
-    message: 'O ID do evento deve ser um UUID válido (versão 4).',
-  })
-  @IsNotEmpty({ message: 'O ID do evento é obrigatório.' })
+  @IsUUID('4')
+  @IsNotEmpty()
   id: string;
 
-  @IsDateString(
-    { strict: true },
-    {
-      message:
-        'O timestamp deve ser uma string de data ISO 8601 válida (ex: AAAA-MM-DDT00:00:00.000Z).',
-    },
-  )
-  @IsNotEmpty({ message: 'O timestamp é obrigatório.' })
+  @IsDateString({ strict: true })
+  @IsNotEmpty()
   timestamp: string;
 
-  @IsEnum(OrderHistoryEventType, {
-    message:
-      'O tipo de evento não é um tipo de evento de histórico de pedido válido.',
-  })
-  @IsNotEmpty({ message: 'O tipo de evento é obrigatório.' })
+  @IsEnum(OrderHistoryEventType)
+  @IsNotEmpty()
   eventType: OrderHistoryEventType;
 
-  @IsString({ message: 'A descrição deve ser uma string.' })
-  @IsNotEmpty({ message: 'A descrição é obrigatória.' })
-  @MaxLength(1000, {
-    message: 'A descrição não pode ter mais de 1000 caracteres.',
-  })
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(1000)
   description: string;
 
   @IsOptional()
-  @IsString({ message: 'O usuário deve ser uma string.' })
-  @MaxLength(100, { message: 'O usuário não pode ter mais de 100 caracteres.' })
+  @IsString()
+  @MaxLength(100)
   user?: string;
 
   @IsOptional()

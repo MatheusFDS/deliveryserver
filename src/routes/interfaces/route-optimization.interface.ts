@@ -1,110 +1,96 @@
-export interface OptimizedOrder {
-  id: string;
-  optimizedOrder: number;
-  address: string;
-  cliente: string;
-  numero: string;
-  distanceFromPrevious?: number;
-  estimatedTime?: number;
-}
+// src/routes/interfaces/route-optimization.interface.ts
 
-export interface OptimizeRouteResponse {
-  success: boolean;
-  optimizedOrders?: OptimizedOrder[];
-  totalDistance?: number;
-  totalTime?: number;
-  mapUrl?: string;
-  error?: string;
-  polyline?: string;
-  hasTolls?: boolean; // Adicionado
-}
+import { OptimizeRouteDto } from '../dto/optimize-route.dto';
 
-export interface GoogleMapsDirectionsResponse {
-  routes: Array<{
-    waypoint_order: number[];
-    legs: Array<{
-      distance: { text: string; value: number };
-      duration: { text: string; value: number };
-      start_address: string;
-      end_address: string;
-      // Propriedades do Google Maps API que podem indicar pedágios
-      steps: Array<any>; // Steps podem conter informações sobre pedágios
-      tolls?: any[]; // A API do Google Maps pode incluir isso, dependendo da versão/config
-    }>;
-    overview_polyline: { points: string };
-    // Propriedades do Google Maps API que podem indicar pedágios
-    warnings?: string[];
-    // Outras propriedades obrigatórias para DirectionsRoute
-    bounds: {
-      northeast: { lat: number; lng: number };
-      southwest: { lat: number; lng: number };
-    };
-    copyrights: string;
-    summary: string;
-  }>;
-  status: string;
-}
+// --- Tipos Base ---
 
-export interface DistanceCalculationResponse {
-  distance: {
-    text: string;
-    value: number;
-  };
-  duration: {
-    text: string;
-    value: number;
-  };
-}
-
-export interface GeocodeResult {
-  address: string;
+export interface LatLng {
   lat: number;
   lng: number;
-  formatted_address: string;
+}
+
+export interface Waypoint {
+  id: string;
+  address: string;
+  clientName?: string;
+  orderNumber?: string;
+}
+
+// --- Tipos de Resultado da API ---
+
+export interface OptimizedRouteResult {
+  optimizedWaypoints: Array<
+    Waypoint & {
+      order: number;
+      distanceFromPreviousInMeters: number;
+      durationFromPreviousInSeconds: number;
+    }
+  >;
+  totalDistanceInMeters: number;
+  totalDurationInSeconds: number;
+  polyline: string;
+  hasTolls: boolean;
+  mapUrl?: string;
+}
+
+export interface DistanceResult {
+  distanceInMeters: number;
+  durationInSeconds: number;
+}
+
+// CORREÇÃO APLICADA AQUI
+// A interface agora tem 'lat' e 'lng' no nível principal,
+// alinhando-se com a implementação do adapter e com o uso no frontend.
+export interface GeocodeResult {
+  originalAddress: string;
+  formattedAddress: string;
+  lat: number;
+  lng: number;
   success: boolean;
   error?: string;
 }
 
-export interface RouteCalculationResult {
-  distance: number;
-  duration: number;
+export interface RouteLeg {
+  startAddress: string;
+  endAddress: string;
+  distanceInMeters: number;
+  durationInSeconds: number;
+}
+
+export interface InteractiveRouteResult {
+  totalDistanceInMeters: number;
+  totalDurationInSeconds: number;
   polyline: string;
-  legs: Array<{
-    distance: number;
-    duration: number;
-    start_address: string;
-    end_address: string;
-  }>;
+  legs: RouteLeg[];
 }
 
-// Adicione essas duas interfaces ao seu arquivo route-optimization.interface.ts existente
-
-export interface DistanceMatrixResponse {
-  status: string;
-  rows: {
-    elements: {
-      status: string;
-      distance: {
-        text: string;
-        value: number;
-      };
-      duration: {
-        text: string;
-        value: number;
-      };
-    }[];
-  }[];
+export interface StaticMapResult {
+  mapUrl: string;
 }
 
-export interface GeocodeResponse {
-  status: string;
-  results: {
-    formatted_address: string;
-    geometry: {
-      location: {
-        lat: number;
-        lng: number;
-      };
-    };
-  }[];
+// --- Interface do Adaptador ---
+
+export const MAPS_ADAPTER = 'MapsAdapter';
+
+export interface IMapsAdapter {
+  optimizeRoute(options: OptimizeRouteDto): Promise<OptimizedRouteResult>;
+
+  calculateDistance(
+    origin: string | LatLng,
+    destination: string | LatLng,
+  ): Promise<DistanceResult>;
+
+  geocodeAddresses(addresses: string[]): Promise<GeocodeResult[]>;
+
+  calculateInteractiveRoute(
+    origin: LatLng,
+    destination: LatLng,
+    waypoints: LatLng[],
+  ): Promise<InteractiveRouteResult>;
+
+  generateStaticMapUrl(options: {
+    markers: Array<{ location: LatLng; label?: string; color?: string }>;
+    polyline?: string;
+    size?: string;
+  }): Promise<StaticMapResult>;
 }

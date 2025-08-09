@@ -8,8 +8,8 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreatePaymentDto } from './dto/create-payment.dto';
-import { Prisma } from '@prisma/client';
-import { PaymentStatus } from '../types/status.enum';
+// CORREÇÃO: Importar Enums e tipos do Prisma Client
+import { Prisma, PaymentStatus } from '@prisma/client';
 import { startOfDay, endOfDay } from 'date-fns';
 
 @Injectable()
@@ -40,7 +40,8 @@ export class PaymentsService {
       );
     }
 
-    const driverId = delivery.motoristaId;
+    // CORREÇÃO: Renomeado para driverId
+    const driverId = delivery.driverId;
 
     const existingPaymentLink = await this.prisma.paymentDelivery.findFirst({
       where: { deliveryId },
@@ -55,7 +56,8 @@ export class PaymentsService {
       return await this.prisma.accountsPayable.create({
         data: {
           amount: delivery.valorFrete,
-          motoristaId: driverId,
+          // CORREÇÃO: Renomeado para driverId
+          driverId: driverId,
           tenantId,
           status: PaymentStatus.PENDENTE,
           isGroup: false,
@@ -92,7 +94,8 @@ export class PaymentsService {
     if (search) {
       where.OR = [
         { id: { contains: search, mode: 'insensitive' } },
-        { Driver: { name: { contains: search, mode: 'insensitive' } } },
+        // CORREÇÃO: camelCase
+        { driver: { name: { contains: search, mode: 'insensitive' } } },
       ];
     }
     if (status) {
@@ -116,7 +119,8 @@ export class PaymentsService {
           skip,
           take,
           include: {
-            Driver: { select: { name: true } },
+            // CORREÇÃO: camelCase
+            driver: { select: { name: true } },
             paymentDeliveries: {
               include: { delivery: { select: { id: true } } },
             },
@@ -164,8 +168,9 @@ export class PaymentsService {
       );
     }
 
-    const firstDriverId = payments[0].motoristaId;
-    if (!payments.every((p) => p.motoristaId === firstDriverId)) {
+    // CORREÇÃO: Renomeado para driverId
+    const firstDriverId = payments[0].driverId;
+    if (!payments.every((p) => p.driverId === firstDriverId)) {
       throw new BadRequestException(
         'Todos os pagamentos devem pertencer ao mesmo motorista.',
       );
@@ -185,7 +190,8 @@ export class PaymentsService {
         const groupedPayment = await tx.accountsPayable.create({
           data: {
             amount: totalAmount,
-            motoristaId: firstDriverId,
+            // CORREÇÃO: Renomeado para driverId
+            driverId: firstDriverId,
             tenantId,
             status: PaymentStatus.PENDENTE,
             isGroup: true,

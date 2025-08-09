@@ -1,10 +1,10 @@
 import {
   Injectable,
   NotFoundException,
-  UnauthorizedException,
   BadRequestException,
-  ConflictException,
+  UnauthorizedException,
   InternalServerErrorException,
+  ConflictException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateVehicleDto } from './dto/create-vehicle.dto';
@@ -103,9 +103,11 @@ export class VehiclesService {
       where.OR = [
         { model: { contains: search, mode: 'insensitive' } },
         { plate: { contains: search, mode: 'insensitive' } },
-        { Driver: { is: { name: { contains: search, mode: 'insensitive' } } } },
+        // CORREÇÃO: camelCase
+        { driver: { is: { name: { contains: search, mode: 'insensitive' } } } },
         {
-          Category: { is: { name: { contains: search, mode: 'insensitive' } } },
+          // CORREÇÃO: camelCase
+          category: { is: { name: { contains: search, mode: 'insensitive' } } },
         },
       ];
     }
@@ -116,10 +118,12 @@ export class VehiclesService {
         skip,
         take,
         include: {
-          Driver: {
+          // CORREÇÃO: camelCase
+          driver: {
             select: { name: true },
           },
-          Category: {
+          // CORREÇÃO: camelCase
+          category: {
             select: { name: true },
           },
         },

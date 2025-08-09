@@ -9,7 +9,8 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateDriverDto } from './dto/create-driver.dto';
 import { UpdateDriverDto } from './dto/update-driver.dto';
-import { Prisma } from '@prisma/client';
+// CORREÇÃO: Importar Enums e tipos do Prisma Client
+import { Prisma, OrderStatus } from '@prisma/client';
 
 @Injectable()
 export class DriversService {
@@ -96,7 +97,8 @@ export class DriversService {
     try {
       return this.prisma.driver.create({
         data: { ...createDriverDto, tenantId },
-        include: { User: { select: { id: true, name: true, email: true } } },
+        // CORREÇÃO: camelCase
+        include: { user: { select: { id: true, name: true, email: true } } },
       });
     } catch (error) {
       throw new InternalServerErrorException(
@@ -124,7 +126,8 @@ export class DriversService {
         { name: { contains: search, mode: 'insensitive' } },
         { cpf: { contains: search, mode: 'insensitive' } },
         { license: { contains: search, mode: 'insensitive' } },
-        { User: { name: { contains: search, mode: 'insensitive' } } },
+        // CORREÇÃO: camelCase
+        { user: { name: { contains: search, mode: 'insensitive' } } },
       ];
     }
 
@@ -134,7 +137,8 @@ export class DriversService {
           where,
           skip,
           take,
-          include: { User: { select: { id: true, name: true, email: true } } },
+          // CORREÇÃO: camelCase
+          include: { user: { select: { id: true, name: true, email: true } } },
           orderBy: { createdAt: 'desc' },
         }),
         this.prisma.driver.count({ where }),
@@ -160,7 +164,8 @@ export class DriversService {
       return await this.prisma.driver.findMany({
         where: { tenantId },
         include: {
-          User: {
+          // CORREÇÃO: camelCase
+          user: {
             select: { id: true, name: true, email: true },
           },
         },
@@ -178,7 +183,8 @@ export class DriversService {
     const driver = await this.prisma.driver.findFirst({
       where: { id, tenantId },
       include: {
-        User: {
+        // CORREÇÃO: camelCase
+        user: {
           select: {
             id: true,
             name: true,
@@ -199,7 +205,7 @@ export class DriversService {
 
   async update(id: string, updateDriverDto: UpdateDriverDto, userId: string) {
     const tenantId = await this.getTenantIdFromUserId(userId);
-    const driver = await this.prisma.driver.findUnique({
+    const driver = await this.prisma.driver.findFirst({
       where: { id, tenantId },
     });
     if (!driver) {
@@ -265,7 +271,8 @@ export class DriversService {
       return this.prisma.driver.update({
         where: { id },
         data: updateDriverDto,
-        include: { User: { select: { id: true, name: true, email: true } } },
+        // CORREÇÃO: camelCase
+        include: { user: { select: { id: true, name: true, email: true } } },
       });
     } catch (error) {
       throw new InternalServerErrorException(
@@ -276,7 +283,7 @@ export class DriversService {
 
   async remove(id: string, userId: string) {
     const tenantId = await this.getTenantIdFromUserId(userId);
-    const driver = await this.prisma.driver.findUnique({
+    const driver = await this.prisma.driver.findFirst({
       where: { id, tenantId },
     });
     if (!driver) {
@@ -310,9 +317,14 @@ export class DriversService {
     });
   }
 
-  async updateOrderStatus(orderId: string, status: string, userId: string) {
+  // CORREÇÃO: Alterado o tipo do parâmetro 'status' para o Enum do Prisma
+  async updateOrderStatus(
+    orderId: string,
+    status: OrderStatus,
+    userId: string,
+  ) {
     const driver = await this.getDriverByUserId(userId);
-    const order = await this.prisma.order.findUnique({
+    const order = await this.prisma.order.findFirst({
       where: { id: orderId, tenantId: driver.tenantId, driverId: driver.id },
     });
 
@@ -330,7 +342,7 @@ export class DriversService {
 
   async saveProof(orderId: string, file: Express.Multer.File, userId: string) {
     const driver = await this.getDriverByUserId(userId);
-    const order = await this.prisma.order.findUnique({
+    const order = await this.prisma.order.findFirst({
       where: { id: orderId, tenantId: driver.tenantId, driverId: driver.id },
     });
     if (!order) {
@@ -339,13 +351,15 @@ export class DriversService {
       );
     }
 
+    // Lembrete: Esta parte será refatorada futuramente para usar o StorageAdapter
     const proofUrl = `path/to/your/proof/${file.filename}`;
 
     return this.prisma.deliveryProof.create({
       data: {
-        Order: { connect: { id: orderId } },
-        Driver: { connect: { id: driver.id } },
-        Tenant: { connect: { id: driver.tenantId } },
+        // CORREÇÃO: camelCase
+        order: { connect: { id: orderId } },
+        driver: { connect: { id: driver.id } },
+        tenant: { connect: { id: driver.tenantId } },
         proofUrl,
         createdAt: new Date(),
       },

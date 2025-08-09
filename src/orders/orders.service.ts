@@ -11,8 +11,8 @@ import {
   OrderHistoryEventDto,
   OrderHistoryEventType,
 } from './dto/order-history-event.dto';
-import { OrderStatus } from '../types/status.enum';
-import { Prisma } from '@prisma/client';
+// CORREÇÃO: Importar Enums e tipos do Prisma Client
+import { Prisma, OrderStatus } from '@prisma/client';
 
 @Injectable()
 export class OrdersService {
@@ -119,6 +119,7 @@ export class OrdersService {
             nomeContato: order.nomeContato?.toString() || '',
             cpfCnpj: order.cpfCnpj?.toString() || 'N/A',
             cep: order.cep?.toString() || 'N/A',
+            // CORREÇÃO: Usando o Enum do Prisma, o tipo agora é compatível.
             status: OrderStatus.SEM_ROTA,
             tenantId: tenantId,
             sorting:
@@ -181,7 +182,8 @@ export class OrdersService {
     }
 
     if (status) {
-      where.status = status;
+      // CORREÇÃO: Fazendo cast da string para o tipo Enum do Prisma.
+      where.status = status as OrderStatus;
     }
 
     if (startDate && endDate) {
@@ -204,8 +206,9 @@ export class OrdersService {
           skip,
           take,
           include: {
-            Delivery: { select: { id: true, status: true } },
-            Driver: { select: { name: true } },
+            // CORREÇÃO: camelCase
+            delivery: { select: { id: true, status: true } },
+            driver: { select: { name: true } },
           },
           orderBy: { createdAt: 'desc' },
         }),
@@ -231,8 +234,9 @@ export class OrdersService {
     return this.prisma.order.findMany({
       where: { tenantId },
       include: {
-        Delivery: { select: { id: true, status: true } },
-        Driver: { select: { name: true } },
+        // CORREÇÃO: camelCase
+        delivery: { select: { id: true, status: true } },
+        driver: { select: { name: true } },
       },
       orderBy: { createdAt: 'desc' },
     });
@@ -243,17 +247,18 @@ export class OrdersService {
     const order = await this.prisma.order.findFirst({
       where: { id, tenantId },
       include: {
-        Delivery: {
+        // CORREÇÃO: camelCase
+        delivery: {
           include: {
-            Driver: true,
-            Vehicle: true,
+            driver: true,
+            vehicle: true,
             approvals: {
-              include: { User: true },
+              include: { user: true },
               orderBy: { createdAt: 'desc' },
             },
           },
         },
-        Driver: true,
+        driver: true,
         deliveryProofs: { orderBy: { createdAt: 'asc' } },
       },
     });
@@ -268,11 +273,13 @@ export class OrdersService {
     userId: string,
   ): Promise<OrderHistoryEventDto[]> {
     const tenantId = await this.getTenantIdFromUserId(userId);
+    // CORREÇÃO: Com o casing corrigido nos includes, `order.history` e `order.deliveryProofs` agora existem.
     const order = await this.prisma.order.findFirst({
       where: { id: orderId, tenantId },
       include: {
         deliveryProofs: {
-          include: { Driver: true },
+          // CORREÇÃO: camelCase
+          include: { driver: true },
           orderBy: { createdAt: 'asc' },
         },
         history: {
@@ -315,7 +322,8 @@ export class OrdersService {
         timestamp: proof.createdAt.toISOString(),
         eventType: OrderHistoryEventType.COMPROVANTE_ANEXADO,
         description: `Comprovante de entrega anexado.`,
-        user: proof.Driver?.name || 'Motorista App',
+        // CORREÇÃO: camelCase
+        user: proof.driver?.name || 'Motorista App',
         details: {
           proofUrl: proof.proofUrl,
         },

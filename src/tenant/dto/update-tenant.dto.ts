@@ -8,7 +8,7 @@ import {
   IsFQDN,
   MaxLength,
   IsNotEmpty,
-  IsBoolean, // Adicionado
+  IsBoolean,
 } from 'class-validator';
 
 export class UpdateTenantDto {
@@ -28,37 +28,25 @@ export class UpdateTenantDto {
 
   @IsOptional()
   @IsNumber(
-    { allowNaN: false, allowInfinity: false, maxDecimalPlaces: 2 },
-    { message: 'A percentagem mínima de entregas deve ser um número válido.' },
+    {},
+    { message: 'A porcentagem mínima de entrega deve ser numérica.' },
   )
-  @Min(0, {
-    message: 'A percentagem mínima de entregas não pode ser negativa.',
-  })
+  @Min(0, { message: 'A porcentagem mínima de entrega não pode ser negativa.' })
   @Max(100, {
-    message: 'A percentagem mínima de entregas não pode ser maior que 100.',
+    message: 'A porcentagem mínima de entrega não pode ser maior que 100.',
   })
   minDeliveryPercentage?: number;
 
   @IsOptional()
-  @IsNumber(
-    { allowNaN: false, allowInfinity: false, maxDecimalPlaces: 2 },
-    { message: 'O valor mínimo deve ser um número válido.' },
-  )
-  @IsPositive({ message: 'O valor mínimo deve ser um número positivo.' })
-  @Min(0, { message: 'O valor mínimo não pode ser negativo.' })
+  @IsNumber({}, { message: 'O valor mínimo deve ser numérico.' })
+  @IsPositive({ message: 'O valor mínimo deve ser positivo.' })
   @Max(99999999.99, {
-    message:
-      'O valor mínimo não pode ter mais de 8 dígitos inteiros (ex: 99.999.999,99).',
+    message: 'O valor mínimo não pode exceder 99.999.999,99.',
   })
   minValue?: number;
 
   @IsOptional()
-  @IsNumber(
-    { allowNaN: false, allowInfinity: false, maxDecimalPlaces: 0 },
-    {
-      message: 'O número mínimo de pedidos deve ser um número inteiro válido.',
-    },
-  )
+  @IsNumber({}, { message: 'O número mínimo de pedidos deve ser numérico.' })
   @Min(0, { message: 'O número mínimo de pedidos não pode ser negativo.' })
   @Max(999999, {
     message: 'O número mínimo de pedidos não pode ser maior que 999.999.',
@@ -66,15 +54,10 @@ export class UpdateTenantDto {
   minOrders?: number;
 
   @IsOptional()
-  @IsNumber(
-    { allowNaN: false, allowInfinity: false, maxDecimalPlaces: 3 },
-    { message: 'O peso mínimo deve ser um número válido.' },
-  )
-  @IsPositive({ message: 'O peso mínimo deve ser um número positivo.' })
-  @Min(0, { message: 'O peso mínimo não pode ser negativo.' })
+  @IsNumber({}, { message: 'O peso mínimo deve ser numérico.' })
+  @IsPositive({ message: 'O peso mínimo deve ser positivo.' })
   @Max(999999.999, {
-    message:
-      'O peso mínimo não pode ter mais de 6 dígitos inteiros (ex: 999.999,999).',
+    message: 'O peso mínimo não pode exceder 999.999,999.',
   })
   minPeso?: number;
 

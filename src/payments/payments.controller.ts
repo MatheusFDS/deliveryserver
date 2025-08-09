@@ -17,7 +17,8 @@ import { CreateGroupPaymentDto } from './dto/create-group-payment.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
-import { PaymentStatus } from '../types/status.enum';
+// CORREÇÃO: Importar o Enum diretamente do Prisma Client
+import { PaymentStatus } from '@prisma/client';
 
 @Controller('payments')
 @UseGuards(JwtAuthGuard, RolesGuard)

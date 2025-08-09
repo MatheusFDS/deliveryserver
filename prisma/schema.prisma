@@ -7,20 +7,61 @@ generator client {
   provider = "prisma-client-js"
 }
 
+// =================================================================
+// ENUMS NATIVOS
+// Justificativa: Garante a integridade dos dados no nível do banco,
+// prevenindo valores inválidos e inconsistentes para status e ações.
+// =================================================================
+
+enum OrderStatus {
+  SEM_ROTA
+  EM_ROTA_AGUARDANDO_LIBERACAO
+  EM_ROTA
+  EM_ENTREGA
+  ENTREGUE
+  NAO_ENTREGUE
+}
+
+enum DeliveryStatus {
+  A_LIBERAR
+  INICIADO
+  FINALIZADO
+  REJEITADO
+}
+
+enum ApprovalAction {
+  APPROVED
+  REJECTED
+  RE_APPROVAL_NEEDED
+}
+
+enum PaymentStatus {
+  PENDENTE
+  PAGO
+  BAIXADO
+  CANCELADO
+}
+
+// =================================================================
+// MODELOS DE DADOS
+// =================================================================
+
 model User {
   id             String         @id @default(uuid())
   isActive       Boolean        @default(true)
   email          String         @unique
   password       String
   name           String
-  role           Role           @relation(fields: [roleId], references: [id])
   roleId         String
-  tenant         Tenant?        @relation(fields: [tenantId], references: [id])
   tenantId       String?
-  settings       UserSettings?
-  driver         Driver?
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @updatedAt
+
+  // Relações
+  role           Role           @relation(fields: [roleId], references: [id])
+  tenant         Tenant?        @relation(fields: [tenantId], references: [id])
+  settings       UserSettings?
+  driver         Driver?
   approvals      Approval[]
   orderHistories OrderHistory[]
 }
@@ -30,9 +71,11 @@ model Role {
   name           String   @unique
   description    String?
   isPlatformRole Boolean  @default(false)
-  users          User[]
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
+
+  // Relações
+  users          User[]
 }
 
 model Tenant {
@@ -45,6 +88,10 @@ model Tenant {
   minValue              Float?
   minOrders             Int?
   minPeso               Float?
+  createdAt             DateTime          @default(now())
+  updatedAt             DateTime          @updatedAt
+
+  // Relações
   users                 User[]
   drivers               Driver[]
   vehicles              Vehicle[]
@@ -57,39 +104,42 @@ model Tenant {
   deliveryProofs        DeliveryProof[]
   payments              Payment[]
   approvals             Approval[]
-  createdAt             DateTime          @default(now())
-  updatedAt             DateTime          @updatedAt
-  OptimizedRoute        OptimizedRoute[]
+  optimizedRoutes       OptimizedRoute[]
 }
 
 model UserSettings {
   id        String   @id @default(uuid())
   userId    String   @unique
-  user      User     @relation(fields: [userId], references: [id])
   settings  Json
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  // Relações
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model Driver {
-  id              String            @id @default(uuid())
-  name            String
-  license         String
-  cpf             String
-  tenantId        String
-  userId          String?           @unique
-  Tenant          Tenant            @relation(fields: [tenantId], references: [id])
-  User            User?             @relation(fields: [userId], references: [id])
+  id        String   @id @default(uuid())
+  name      String
+  license   String
+  cpf       String
+  tenantId  String
+  userId    String?  @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relações
+  tenant          Tenant            @relation(fields: [tenantId], references: [id])
+  user            User?             @relation(fields: [userId], references: [id], onDelete: SetNull)
   vehicles        Vehicle[]
   deliveries      Delivery[]
   orders          Order[]
   accountsPayable AccountsPayable[]
   deliveryProofs  DeliveryProof[]
   payments        Payment[]
-  createdAt       DateTime          @default(now())
-  updatedAt       DateTime          @updatedAt
 
   @@unique([cpf, tenantId])
+  @@index([tenantId])
 }
 
 model Vehicle {
@@ -101,70 +151,78 @@ model Vehicle {
   driverId   String
   tenantId   String
   categoryId String
-  Driver     Driver   @relation(fields: [driverId], references: [id])
-  Tenant     Tenant   @relation(fields: [tenantId], references: [id])
-  Category   Category @relation(fields: [categoryId], references: [id])
-  deliveries Delivery[]
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
+  // Relações
+  driver     Driver   @relation(fields: [driverId], references: [id])
+  tenant     Tenant   @relation(fields: [tenantId], references: [id])
+  category   Category @relation(fields: [categoryId], references: [id])
+  deliveries Delivery[]
+
   @@unique([plate, tenantId])
+  @@index([tenantId])
+  @@index([driverId])
 }
 
 model Order {
-  id                   String         @id @default(uuid())
-  numero               String
-  data                 DateTime
-  idCliente            String
-  cliente              String
-  endereco             String
-  cidade               String
-  uf                   String
-  peso                 Float
-  volume               Int
-  prazo                String?
-  prioridade           String
-  telefone             String
-  email                String
-  bairro               String
-  valor                Float
-  instrucoesEntrega    String?
-  nomeContato          String
-  cpfCnpj              String
-  cep                  String
-  status               String
-  motivoNaoEntrega     String?
+  id                     String    @id @default(uuid())
+  numero                 String
+  data                   DateTime
+  idCliente              String
+  cliente                String
+  endereco               String
+  cidade                 String
+  uf                     String
+  peso                   Float
+  volume                 Int
+  prazo                  String?
+  prioridade             String
+  telefone               String
+  email                  String
+  bairro                 String
+  valor                  Float
+  instrucoesEntrega      String?
+  nomeContato            String
+  cpfCnpj                String
+  cep                    String
+  status                 OrderStatus @default(SEM_ROTA) // Alterado para Enum
+  motivoNaoEntrega       String?
   codigoMotivoNaoEntrega String?
-  deliveryId           String?
-  tenantId             String
-  driverId             String?
-  Tenant               Tenant         @relation(fields: [tenantId], references: [id])
-  Delivery             Delivery?      @relation(fields: [deliveryId], references: [id], onDelete: SetNull)
-  Driver               Driver?        @relation(fields: [driverId], references: [id])
-  sorting              Int?
-  startedAt            DateTime?
-  completedAt          DateTime?
-  createdAt            DateTime       @default(now())
-  updatedAt            DateTime       @updatedAt
-  deliveryProofs       DeliveryProof[]
-  history              OrderHistory[]
+  deliveryId             String?
+  tenantId               String
+  driverId               String?
+  sorting                Int?
+  startedAt              DateTime?
+  completedAt            DateTime?
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
 
+  // Relações
+  tenant         Tenant         @relation(fields: [tenantId], references: [id])
+  delivery       Delivery?      @relation(fields: [deliveryId], references: [id], onDelete: SetNull)
+  driver         Driver?        @relation(fields: [driverId], references: [id])
+  deliveryProofs DeliveryProof[]
+  history        OrderHistory[]
+
+  @@unique([numero, tenantId])
   @@index([deliveryId])
   @@index([tenantId])
   @@index([status])
-  @@unique([numero, tenantId])
 }
 
 model OrderHistory {
   id          String   @id @default(uuid())
   orderId     String
-  order       Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
   status      String
   description String
   userId      String?
-  user        User?    @relation(fields: [userId], references: [id])
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+
+  // Relações
+  order       Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  user        User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   @@index([orderId])
   @@index([createdAt])
@@ -177,88 +235,107 @@ model Directions {
   valorDirecao Int
   regiao       String
   tenantId     String
-  Tenant       Tenant   @relation(fields: [tenantId], references: [id])
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+
+  // Relações
+  tenant       Tenant   @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId])
 }
 
 model Delivery {
-  id                String            @id @default(uuid())
-  motoristaId       String
-  veiculoId         String
-  valorFrete        Float
-  totalPeso         Float
-  totalValor        Float
-  dataInicio        DateTime          @default(now())
-  dataFim           DateTime?
-  status            String
-  tenantId          String
-  dataLiberacao     DateTime?
-  observacao        String?
-  createdAt         DateTime          @default(now())
-  updatedAt         DateTime          @updatedAt
-  Tenant            Tenant            @relation(fields: [tenantId], references: [id])
+  id            String         @id @default(uuid())
+  driverId      String         // Padronizado de 'motoristaId' para 'driverId'
+  vehicleId     String
+  valorFrete    Float
+  totalPeso     Float
+  totalValor    Float
+  dataInicio    DateTime       @default(now())
+  dataFim       DateTime?
+  status        DeliveryStatus // Alterado para Enum
+  tenantId      String
+  dataLiberacao DateTime?
+  observacao    String?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  // Relações
+  tenant            Tenant            @relation(fields: [tenantId], references: [id])
+  driver            Driver            @relation(fields: [driverId], references: [id])
+  vehicle           Vehicle           @relation(fields: [vehicleId], references: [id])
   orders            Order[]
-  Driver            Driver            @relation(fields: [motoristaId], references: [id])
-  Vehicle           Vehicle           @relation(fields: [veiculoId], references: [id])
-  paymentDeliveries PaymentDelivery[] @relation("DeliveryToPaymentDeliveries")
+  paymentDeliveries PaymentDelivery[]
   approvals         Approval[]
+
+  @@index([tenantId])
+  @@index([driverId])
 }
 
 model Approval {
-  id         String   @id @default(uuid())
+  id         String         @id @default(uuid())
   deliveryId String
   tenantId   String
-  action     String
+  action     ApprovalAction // Alterado para Enum
   motivo     String?
   userId     String
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
-  Delivery   Delivery @relation(fields: [deliveryId], references: [id], onDelete: Cascade)
-  Tenant     Tenant   @relation(fields: [tenantId], references: [id])
-  User       User     @relation(fields: [userId], references: [id])
+  createdAt  DateTime       @default(now())
+  updatedAt  DateTime       @updatedAt
+
+  // Relações
+  delivery   Delivery @relation(fields: [deliveryId], references: [id], onDelete: Cascade)
+  tenant     Tenant   @relation(fields: [tenantId], references: [id])
+  user       User     @relation(fields: [userId], references: [id])
 
   @@index([deliveryId])
   @@index([userId])
 }
 
 model Category {
-  id        String    @id @default(uuid())
+  id        String   @id @default(uuid())
   name      String
   valor     Float
   tenantId  String
-  Tenant    Tenant    @relation(fields: [tenantId], references: [id])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relações
+  tenant    Tenant    @relation(fields: [tenantId], references: [id])
   vehicles  Vehicle[]
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+
+  @@unique([name, tenantId])
 }
 
 model AccountsPayable {
   id                String            @id @default(uuid())
   amount            Float
-  status            String
+  status            PaymentStatus     @default(PENDENTE)
   tenantId          String
-  motoristaId       String
+  driverId          String            // Padronizado de 'motoristaId' para 'driverId'
   createdAt         DateTime          @default(now())
   updatedAt         DateTime          @updatedAt
   isGroup           Boolean           @default(false)
   groupedPaymentId  String?
+
+  // Relações
   groupedPayment    AccountsPayable?  @relation("GroupedPayments", fields: [groupedPaymentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   groupedPayments   AccountsPayable[] @relation("GroupedPayments")
-  Tenant            Tenant            @relation(fields: [tenantId], references: [id])
-  Driver            Driver            @relation(fields: [motoristaId], references: [id])
-  paymentDeliveries PaymentDelivery[] @relation("PaymentToPaymentDeliveries")
+  tenant            Tenant            @relation(fields: [tenantId], references: [id])
+  driver            Driver            @relation(fields: [driverId], references: [id])
+  paymentDeliveries PaymentDelivery[]
 }
 
 model PaymentDelivery {
-  paymentId       String
-  deliveryId      String
-  tenantId        String
-  Tenant          Tenant          @relation(fields: [tenantId], references: [id])
-  accountsPayable AccountsPayable @relation(fields: [paymentId], references: [id], onDelete: Cascade, name: "PaymentToPaymentDeliveries")
-  delivery        Delivery        @relation(fields: [deliveryId], references: [id], onDelete: Cascade, name: "DeliveryToPaymentDeliveries")
-  createdAt       DateTime        @default(now())
-  updatedAt       DateTime        @updatedAt
+  paymentId  String
+  deliveryId String
+  tenantId   String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  // Relações
+  tenant          Tenant          @relation(fields: [tenantId], references: [id])
+  accountsPayable AccountsPayable @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  delivery        Delivery        @relation(fields: [deliveryId], references: [id], onDelete: Cascade)
 
   @@id([paymentId, deliveryId])
 }
@@ -267,37 +344,47 @@ model Payment {
   id        String   @id @default(uuid())
   amount    Float
   driverId  String
-  Driver    Driver   @relation(fields: [driverId], references: [id])
   tenantId  String
-  Tenant    Tenant   @relation(fields: [tenantId], references: [id])
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  // Relações
+  driver    Driver   @relation(fields: [driverId], references: [id])
+  tenant    Tenant   @relation(fields: [tenantId], references: [id])
 }
 
 model DeliveryProof {
   id        String   @id @default(uuid())
   orderId   String
-  Order     Order    @relation(fields: [orderId], references: [id])
   driverId  String
-  Driver    Driver   @relation(fields: [driverId], references: [id])
   tenantId  String
-  Tenant    Tenant   @relation(fields: [tenantId], references: [id])
   proofUrl  String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  // Relações
+  order     Order    @relation(fields: [orderId], references: [id])
+  driver    Driver   @relation(fields: [driverId], references: [id])
+  tenant    Tenant   @relation(fields: [tenantId], references: [id])
 }
 
 model OptimizedRoute {
   id            String   @id @default(uuid())
   tenantId      String
   startingPoint String
-  routeData     String
-  mapUrl        String?
-  totalDistance Float
-  totalTime     Int
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
-  Tenant        Tenant   @relation(fields: [tenantId], references: [id])
+
+  // --- MODELO REFATORADO PARA ABSTRAÇÃO ---
+  provider      String   // Ex: "Maps", "mapbox", "internal_calculator"
+  providerData  Json     // Armazena a resposta agnóstica do provedor.
+  
+  totalDistance Float?
+  totalTime     Int?
+  mapUrl        String?
+
+  // Relações
+  tenant        Tenant   @relation(fields: [tenantId], references: [id])
 
   @@index([tenantId])
   @@index([createdAt])

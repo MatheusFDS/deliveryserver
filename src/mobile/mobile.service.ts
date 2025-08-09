@@ -8,11 +8,8 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { DeliveryService } from '../delivery/delivery.service';
 import { DriversService } from '../drivers/drivers.service';
-import {
-  OrderStatus,
-  DeliveryStatus,
-  PaymentStatus,
-} from '../types/status.enum';
+// CORREÇÃO: Importar Enums diretamente do Prisma Client
+import { OrderStatus, DeliveryStatus, PaymentStatus } from '@prisma/client';
 import * as sharp from 'sharp';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -87,7 +84,8 @@ export class MobileService {
     const vehicle = driver
       ? await this.prisma.vehicle.findFirst({
           where: { driverId: driver.id, tenantId: tenantId },
-          include: { Category: true },
+          // CORREÇÃO: camelCase
+          include: { category: true },
         })
       : null;
 
@@ -113,7 +111,7 @@ export class MobileService {
     const { id: driverId, tenantId } =
       await this.getDriverDetailsByUserId(userId);
 
-    const statusFilter = includeHistory
+    const statusFilter: DeliveryStatus[] = includeHistory
       ? [
           DeliveryStatus.A_LIBERAR,
           DeliveryStatus.INICIADO,
@@ -123,7 +121,8 @@ export class MobileService {
 
     const deliveriesFromDb = await this.prisma.delivery.findMany({
       where: {
-        motoristaId: driverId,
+        // CORREÇÃO: Renomeado para driverId
+        driverId: driverId,
         tenantId,
         status: { in: statusFilter },
       },
@@ -140,8 +139,9 @@ export class MobileService {
             },
           },
         },
-        Driver: true,
-        Vehicle: true,
+        // CORREÇÃO: camelCase
+        driver: true,
+        vehicle: true,
         paymentDeliveries: {
           include: {
             accountsPayable: {
@@ -157,9 +157,7 @@ export class MobileService {
       let paymentStatus: 'pago' | 'nao_pago' = 'nao_pago';
       if (delivery.paymentDeliveries && delivery.paymentDeliveries.length > 0) {
         const isPaid = delivery.paymentDeliveries.some(
-          (pd) =>
-            pd.accountsPayable?.status?.toUpperCase() ===
-            PaymentStatus.PAGO.toUpperCase(),
+          (pd) => pd.accountsPayable?.status === PaymentStatus.PAGO,
         );
         if (isPaid) {
           paymentStatus = 'pago';
@@ -169,22 +167,23 @@ export class MobileService {
       return {
         id: delivery.id,
         date: delivery.dataInicio.toISOString().split('T')[0],
-        status: this.mapRouteStatusToMobile(delivery.status as DeliveryStatus),
+        status: this.mapRouteStatusToMobile(delivery.status),
         totalValue: delivery.totalValor,
         freightValue: delivery.valorFrete,
         paymentStatus: paymentStatus,
         observacao: delivery.observacao,
-        vehicle: delivery.Vehicle
-          ? `${delivery.Vehicle.model} (${delivery.Vehicle.plate})`
+        // CORREÇÃO: camelCase
+        vehicle: delivery.vehicle
+          ? `${delivery.vehicle.model} (${delivery.vehicle.plate})`
           : 'Não informado',
-        driverName: delivery.Driver?.name || 'Não informado',
+        driverName: delivery.driver?.name || 'Não informado',
         deliveries: delivery.orders.map((order) => ({
           id: order.id,
           customerName: order.cliente,
           address: `${order.endereco}, ${order.bairro}, ${order.cidade} - ${order.uf} (${order.cep})`,
           phone: order.telefone,
           value: order.valor,
-          status: this.mapOrderStatusToMobile(order.status as OrderStatus),
+          status: this.mapOrderStatusToMobile(order.status),
           items: [`Pedido ${order.numero}`],
           paymentMethod: 'A combinar',
           notes: order.instrucoesEntrega,
@@ -212,7 +211,8 @@ export class MobileService {
 
     const deliveriesFromDb = await this.prisma.delivery.findMany({
       where: {
-        motoristaId: driverId,
+        // CORREÇÃO: Renomeado para driverId
+        driverId: driverId,
         tenantId,
         status: DeliveryStatus.FINALIZADO,
       },
@@ -221,21 +221,16 @@ export class MobileService {
           orderBy: { sorting: 'asc' },
           include: {
             deliveryProofs: {
-              select: {
-                id: true,
-                proofUrl: true,
-                createdAt: true,
-              },
+              select: { id: true, proofUrl: true, createdAt: true },
             },
           },
         },
-        Driver: true,
-        Vehicle: true,
+        // CORREÇÃO: camelCase
+        driver: true,
+        vehicle: true,
         paymentDeliveries: {
           include: {
-            accountsPayable: {
-              select: { status: true },
-            },
+            accountsPayable: { select: { status: true } },
           },
         },
       },
@@ -246,9 +241,7 @@ export class MobileService {
       let paymentStatus: 'pago' | 'nao_pago' = 'nao_pago';
       if (delivery.paymentDeliveries && delivery.paymentDeliveries.length > 0) {
         const isPaid = delivery.paymentDeliveries.some(
-          (pd) =>
-            pd.accountsPayable?.status?.toUpperCase() ===
-            PaymentStatus.PAGO.toUpperCase(),
+          (pd) => pd.accountsPayable?.status === PaymentStatus.PAGO,
         );
         if (isPaid) {
           paymentStatus = 'pago';
@@ -260,22 +253,23 @@ export class MobileService {
         date: (delivery.dataFim || delivery.dataInicio)
           .toISOString()
           .split('T')[0],
-        status: this.mapRouteStatusToMobile(delivery.status as DeliveryStatus),
+        status: this.mapRouteStatusToMobile(delivery.status),
         totalValue: delivery.totalValor,
         freightValue: delivery.valorFrete,
         paymentStatus: paymentStatus,
         observacao: delivery.observacao,
-        vehicle: delivery.Vehicle
-          ? `${delivery.Vehicle.model} (${delivery.Vehicle.plate})`
+        // CORREÇÃO: camelCase
+        vehicle: delivery.vehicle
+          ? `${delivery.vehicle.model} (${delivery.vehicle.plate})`
           : 'Não informado',
-        driverName: delivery.Driver?.name || 'Não informado',
+        driverName: delivery.driver?.name || 'Não informado',
         deliveries: delivery.orders.map((order) => ({
           id: order.id,
           customerName: order.cliente,
           address: `${order.endereco}, ${order.bairro}, ${order.cidade} - ${order.uf} (${order.cep})`,
           phone: order.telefone,
           value: order.valor,
-          status: this.mapOrderStatusToMobile(order.status as OrderStatus),
+          status: this.mapOrderStatusToMobile(order.status),
           items: [`Pedido ${order.numero}`],
           paymentMethod: 'A combinar',
           notes: order.instrucoesEntrega,
@@ -303,7 +297,8 @@ export class MobileService {
 
     const deliveries = await this.prisma.delivery.findMany({
       where: {
-        motoristaId: driverId,
+        // CORREÇÃO: Renomeado para driverId
+        driverId: driverId,
         tenantId: tenantId,
         status: DeliveryStatus.FINALIZADO,
       },
@@ -324,9 +319,7 @@ export class MobileService {
       let isDeliveryPaid = false;
       if (delivery.paymentDeliveries && delivery.paymentDeliveries.length > 0) {
         isDeliveryPaid = delivery.paymentDeliveries.some(
-          (pd) =>
-            pd.accountsPayable?.status?.toUpperCase() ===
-            PaymentStatus.PAGO.toUpperCase(),
+          (pd) => pd.accountsPayable?.status === PaymentStatus.PAGO,
         );
       }
       if (!isDeliveryPaid) {
@@ -355,23 +348,21 @@ export class MobileService {
       where: {
         id: routeId,
         tenantId: tenantId,
-        motoristaId: driverId,
+        // CORREÇÃO: Renomeado para driverId
+        driverId: driverId,
       },
       include: {
         orders: {
           orderBy: { sorting: 'asc' },
           include: {
             deliveryProofs: {
-              select: {
-                id: true,
-                proofUrl: true,
-                createdAt: true,
-              },
+              select: { id: true, proofUrl: true, createdAt: true },
             },
           },
         },
-        Driver: true,
-        Vehicle: true,
+        // CORREÇÃO: camelCase
+        driver: true,
+        vehicle: true,
       },
     });
 
@@ -384,20 +375,21 @@ export class MobileService {
     const route = {
       id: delivery.id,
       date: delivery.dataInicio.toISOString().split('T')[0],
-      status: this.mapRouteStatusToMobile(delivery.status as DeliveryStatus),
+      status: this.mapRouteStatusToMobile(delivery.status),
       totalValue: delivery.totalValor,
       observacao: delivery.observacao,
-      vehicle: delivery.Vehicle
-        ? `${delivery.Vehicle.model} (${delivery.Vehicle.plate})`
+      // CORREÇÃO: camelCase
+      vehicle: delivery.vehicle
+        ? `${delivery.vehicle.model} (${delivery.vehicle.plate})`
         : 'Não informado',
-      driverName: delivery.Driver?.name || 'Não informado',
+      driverName: delivery.driver?.name || 'Não informado',
       deliveries: delivery.orders.map((order) => ({
         id: order.id,
         customerName: order.cliente,
         address: `${order.endereco}, ${order.bairro}, ${order.cidade} - ${order.uf} (${order.cep})`,
         phone: order.telefone,
         value: order.valor,
-        status: this.mapOrderStatusToMobile(order.status as OrderStatus),
+        status: this.mapOrderStatusToMobile(order.status),
         items: [`Pedido ${order.numero}`],
         paymentMethod: 'A combinar',
         notes: order.instrucoesEntrega,
@@ -430,10 +422,12 @@ export class MobileService {
       where: {
         id: orderId,
         tenantId,
-        Delivery: { motoristaId: driverId },
+        // CORREÇÃO: camelCase e renomeado para driverId
+        delivery: { driverId: driverId },
       },
       include: {
-        Delivery: {
+        // CORREÇÃO: camelCase
+        delivery: {
           select: {
             id: true,
             status: true,
@@ -463,7 +457,7 @@ export class MobileService {
       address: `${order.endereco}, ${order.bairro}, ${order.cidade} - ${order.uf} (${order.cep})`,
       phone: order.telefone,
       value: order.valor,
-      status: this.mapOrderStatusToMobile(order.status as OrderStatus),
+      status: this.mapOrderStatusToMobile(order.status),
       items: [`Pedido ${order.numero}`],
       paymentMethod: 'A combinar',
       notes: order.instrucoesEntrega,
@@ -471,11 +465,12 @@ export class MobileService {
       cpfCnpjDestinatario: order.cpfCnpj,
       nomeContato: order.nomeContato,
       emailDestinatario: order.email,
-      routeId: order.Delivery?.id || null,
-      routeStatus: order.Delivery
-        ? this.mapRouteStatusToMobile(order.Delivery.status as DeliveryStatus)
+      // CORREÇÃO: camelCase
+      routeId: order.delivery?.id || null,
+      routeStatus: order.delivery
+        ? this.mapRouteStatusToMobile(order.delivery.status)
         : null,
-      routeNotes: order.Delivery?.observacao || null,
+      routeNotes: order.delivery?.observacao || null,
       hasProof: order.deliveryProofs.length > 0,
       proofCount: order.deliveryProofs.length,
       proofs: order.deliveryProofs,
@@ -508,22 +503,7 @@ export class MobileService {
       );
     }
 
-    let typedBackendStatus:
-      | OrderStatus.EM_ENTREGA
-      | OrderStatus.ENTREGUE
-      | OrderStatus.NAO_ENTREGUE;
-
-    if (
-      backendStatusString === OrderStatus.EM_ENTREGA ||
-      backendStatusString === OrderStatus.ENTREGUE ||
-      backendStatusString === OrderStatus.NAO_ENTREGUE
-    ) {
-      typedBackendStatus = backendStatusString;
-    } else {
-      throw new BadRequestException(
-        `Status backend mapeado '${backendStatusString}' é inválido para esta operação.`,
-      );
-    }
+    const typedBackendStatus = backendStatusString;
 
     if (
       typedBackendStatus === OrderStatus.NAO_ENTREGUE &&
@@ -560,7 +540,6 @@ export class MobileService {
     orderId: string,
     file: Express.Multer.File,
     userId: string,
-    // CORRIGIDO: Removido 'description' pois não era usado.
   ) {
     if (!this.isValidUUID(orderId)) {
       throw new BadRequestException(`ID de pedido inválido: ${orderId}`);
@@ -571,7 +550,8 @@ export class MobileService {
 
     const order = await this.prisma.order.findFirst({
       where: { id: orderId, tenantId },
-      include: { Delivery: true },
+      // CORREÇÃO: camelCase
+      include: { delivery: true },
     });
 
     if (!order) {
@@ -580,7 +560,8 @@ export class MobileService {
       );
     }
 
-    if (order.Delivery && order.Delivery.motoristaId !== driverId) {
+    // CORREÇÃO: camelCase e renomeado para driverId
+    if (order.delivery && order.delivery.driverId !== driverId) {
       throw new ForbiddenException(
         'Você não tem permissão para anexar comprovantes a este pedido.',
       );
@@ -590,6 +571,7 @@ export class MobileService {
       throw new BadRequestException('Arquivo de imagem é obrigatório.');
     }
 
+    // Lembrete: Esta parte será refatorada futuramente para usar o StorageAdapter
     try {
       const uploadsDir = path.join(process.cwd(), 'uploads', 'proofs');
       if (!fs.existsSync(uploadsDir)) {
@@ -641,7 +623,8 @@ export class MobileService {
       await this.getDriverDetailsByUserId(userId);
 
     const order = await this.prisma.order.findFirst({
-      where: { id: orderId, tenantId, Delivery: { motoristaId: driverId } },
+      // CORREÇÃO: camelCase e renomeado para driverId
+      where: { id: orderId, tenantId, delivery: { driverId: driverId } },
     });
 
     if (!order) {
@@ -652,7 +635,8 @@ export class MobileService {
 
     const proofs = await this.prisma.deliveryProof.findMany({
       where: { orderId, tenantId },
-      include: { Driver: { select: { name: true } } },
+      // CORREÇÃO: camelCase
+      include: { driver: { select: { name: true } } },
       orderBy: { createdAt: 'desc' },
     });
 
@@ -660,7 +644,8 @@ export class MobileService {
       data: proofs.map((proof) => ({
         id: proof.id,
         proofUrl: proof.proofUrl,
-        driverName: proof.Driver.name,
+        // CORREÇÃO: camelCase
+        driverName: proof.driver.name,
         createdAt: proof.createdAt,
       })),
       success: true,
@@ -668,79 +653,50 @@ export class MobileService {
     };
   }
 
-  private mapRouteStatusToMobile(
-    statusBackend: DeliveryStatus | string,
-  ): string {
-    switch (statusBackend) {
-      case DeliveryStatus.A_LIBERAR:
-        return 'a_liberar';
-      case DeliveryStatus.INICIADO:
-        return 'iniciado';
-      case DeliveryStatus.FINALIZADO:
-        return 'finalizado';
-      case DeliveryStatus.REJEITADO:
-        return 'rejeitado';
-      default:
-        return String(statusBackend);
-    }
+  private mapRouteStatusToMobile(statusBackend: DeliveryStatus): string {
+    const mapping: Record<DeliveryStatus, string> = {
+      [DeliveryStatus.A_LIBERAR]: 'a_liberar',
+      [DeliveryStatus.INICIADO]: 'iniciado',
+      [DeliveryStatus.FINALIZADO]: 'finalizado',
+      [DeliveryStatus.REJEITADO]: 'rejeitado',
+    };
+    return mapping[statusBackend] || String(statusBackend);
   }
 
-  private mapOrderStatusToMobile(statusBackend: OrderStatus | string): string {
-    switch (statusBackend) {
-      case OrderStatus.SEM_ROTA:
-        return 'sem_rota';
-      case OrderStatus.EM_ROTA_AGUARDANDO_LIBERACAO:
-        return 'aguardando_liberacao_rota';
-      case OrderStatus.EM_ROTA:
-        return 'em_rota';
-      case OrderStatus.EM_ENTREGA:
-        return 'em_entrega';
-      case OrderStatus.ENTREGUE:
-        return 'entregue';
-      case OrderStatus.NAO_ENTREGUE:
-        return 'nao_entregue';
-      default:
-        return String(statusBackend);
-    }
+  private mapOrderStatusToMobile(statusBackend: OrderStatus): string {
+    const mapping: Record<OrderStatus, string> = {
+      [OrderStatus.SEM_ROTA]: 'sem_rota',
+      [OrderStatus.EM_ROTA_AGUARDANDO_LIBERACAO]: 'aguardando_liberacao_rota',
+      [OrderStatus.EM_ROTA]: 'em_rota',
+      [OrderStatus.EM_ENTREGA]: 'em_entrega',
+      [OrderStatus.ENTREGUE]: 'entregue',
+      [OrderStatus.NAO_ENTREGUE]: 'nao_entregue',
+    };
+    return mapping[statusBackend] || String(statusBackend);
   }
 
-  private mapMobileToOrderStatus(
-    statusMobile: string,
-  ):
-    | OrderStatus.EM_ENTREGA
-    | OrderStatus.ENTREGUE
-    | OrderStatus.NAO_ENTREGUE
-    | null {
-    switch (statusMobile?.toLowerCase()) {
-      case 'em_entrega':
-      case 'iniciada':
-        return OrderStatus.EM_ENTREGA;
-      case 'entregue':
-      case 'finalizada':
-        return OrderStatus.ENTREGUE;
-      case 'nao_entregue':
-      case 'retornada':
-        return OrderStatus.NAO_ENTREGUE; // CORRIGIDO: De NAO_ENTREGA para NAO_ENTREGUE
-      default:
-        return null;
-    }
+  private mapMobileToOrderStatus(statusMobile: string): OrderStatus | null {
+    const mapping: Record<string, OrderStatus> = {
+      em_entrega: OrderStatus.EM_ENTREGA,
+      iniciada: OrderStatus.EM_ENTREGA,
+      entregue: OrderStatus.ENTREGUE,
+      finalizada: OrderStatus.ENTREGUE,
+      nao_entregue: OrderStatus.NAO_ENTREGUE,
+      retornada: OrderStatus.NAO_ENTREGUE,
+    };
+    return mapping[statusMobile?.toLowerCase()] || null;
   }
 
   private mapMobileToDeliveryStatus(
     statusMobile: string,
   ): DeliveryStatus | null {
-    switch (statusMobile?.toLowerCase()) {
-      case 'a_liberar':
-        return DeliveryStatus.A_LIBERAR;
-      case 'iniciado':
-      case 'pendente':
-        return DeliveryStatus.INICIADO;
-      case 'finalizado':
-        return DeliveryStatus.FINALIZADO;
-      case 'rejeitado':
-        return DeliveryStatus.REJEITADO;
-      default:
-        return null;
-    }
+    const mapping: Record<string, DeliveryStatus> = {
+      a_liberar: DeliveryStatus.A_LIBERAR,
+      iniciado: DeliveryStatus.INICIADO,
+      pendente: DeliveryStatus.INICIADO,
+      finalizado: DeliveryStatus.FINALIZADO,
+      rejeitado: DeliveryStatus.REJEITADO,
+    };
+    return mapping[statusMobile?.toLowerCase()] || null;
   }
 }
