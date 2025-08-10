@@ -1,20 +1,24 @@
+// src/mobile/mobile.module.ts
+
 import { Module, forwardRef } from '@nestjs/common';
 import { MobileController } from './mobile.controller';
-import { DeliveryService } from '../delivery/delivery.service';
+import { MobileService } from './mobile.service';
 import { DriversService } from '../drivers/drivers.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthModule } from '../auth/auth.module';
-import { MobileService } from './mobile.service';
-import { UsersModule } from 'src/users/users.module'; // Adicionado
-import { TenantModule } from 'src/tenant/tenant.module'; // Adicionado
+import { UsersModule } from '../users/users.module';
+import { TenantModule } from '../tenant/tenant.module';
+import { DeliveryModule } from '../delivery/delivery.module'; // 1. Importar o DeliveryModule
 
 @Module({
   imports: [
-    forwardRef(() => AuthModule), // Adicionado forwardRef
-    forwardRef(() => UsersModule), // Adicionado
-    forwardRef(() => TenantModule), // Adicionado
+    forwardRef(() => AuthModule),
+    forwardRef(() => UsersModule),
+    forwardRef(() => TenantModule),
+    DeliveryModule, // 2. Adicionar o DeliveryModule aos imports
   ],
   controllers: [MobileController],
-  providers: [MobileService, DeliveryService, DriversService, PrismaService],
+  // 3. Remover DeliveryService dos providers daqui
+  providers: [MobileService, DriversService, PrismaService],
 })
 export class MobileModule {}
