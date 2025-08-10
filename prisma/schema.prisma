@@ -83,6 +83,7 @@ model Tenant {
   isActive              Boolean           @default(true)
   name                  String            @unique
   domain                String?           @unique
+  mobileDomain          String?           @unique
   minDeliveryPercentage Float?
   address               String?
   minValue              Float?

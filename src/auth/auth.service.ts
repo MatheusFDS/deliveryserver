@@ -36,6 +36,7 @@ export class AuthService {
     email: string,
     pass: string,
     domain?: string,
+    isMobile: boolean = false,
   ): Promise<any> {
     try {
       const user = await this.prisma.user.findUnique({
@@ -61,7 +62,6 @@ export class AuthService {
 
       const normalizedDomain = domain ? domain.split(':')[0] : undefined;
 
-      // Permite superadmin somente nos domínios específicos
       if (user.role.name.toLowerCase() === 'superadmin') {
         if (
           normalizedDomain === 'deliveryweb-production.up.railway.app' ||
@@ -76,12 +76,10 @@ export class AuthService {
         }
       }
 
-      // Verifica tenant ativo
       if (user.tenantId && (!user.tenant || !user.tenant.isActive)) {
         throw new UnauthorizedException('Tenant inativo.');
       }
 
-      // Detecta ambiente local (localhost, localhost:8081, 127.0.0.1, IP local)
       const isLocalDev =
         normalizedDomain === 'localhost' ||
         normalizedDomain === '127.0.0.1' ||
@@ -92,17 +90,24 @@ export class AuthService {
         return this.removePassword(user);
       }
 
-      // Valida domínio do tenant para ambiente não local
-      if (domain) {
-        if (!user.tenant || user.tenant.domain !== normalizedDomain) {
+      if (domain && user.tenant) {
+        let expectedDomain: string | null = null;
+
+        if (isMobile) {
+          expectedDomain = user.tenant.mobileDomain || user.tenant.domain;
+        } else {
+          expectedDomain = user.tenant.domain;
+        }
+
+        if (expectedDomain && expectedDomain !== normalizedDomain) {
           throw new UnauthorizedException(
-            'Domínio inválido ou usuário não pertence a este domínio.',
+            `Domínio inválido para ${isMobile ? 'mobile' : 'web'}. Esperado: ${expectedDomain}, Recebido: ${normalizedDomain}`,
           );
         }
-      } else {
-        if (user.tenant && user.tenant.domain) {
-          throw new BadRequestException(
-            'Para este usuário, o domínio é obrigatório.',
+
+        if (!expectedDomain && user.tenant) {
+          throw new UnauthorizedException(
+            `Domínio não configurado para este tenant no acesso ${isMobile ? 'mobile' : 'web'}.`,
           );
         }
       }
@@ -125,9 +130,9 @@ export class AuthService {
       loginDto.email,
       loginDto.password,
       loginDto.domain,
+      loginDto.isMobile || false,
     );
 
-    // Bloqueia motorista sem vínculo de driverId
     if (user.role.name.toLowerCase() === 'driver' && !user.driver) {
       throw new UnauthorizedException(
         'Motorista não vinculado a um registro de driver.',
@@ -171,7 +176,6 @@ export class AuthService {
 
   async refreshToken(token: string) {
     try {
-      // Verifica se o token está invalidado
       if (await this.isTokenInvalid(token)) {
         throw new UnauthorizedException('Token de atualização inválido.');
       }

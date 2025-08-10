@@ -1,4 +1,10 @@
-import { IsEmail, IsString, IsOptional, MinLength } from 'class-validator';
+import {
+  IsEmail,
+  IsString,
+  IsOptional,
+  MinLength,
+  IsBoolean,
+} from 'class-validator';
 
 export class LoginDto {
   @IsEmail({}, { message: 'O email deve ser um endereço de e-mail válido.' })
@@ -11,4 +17,8 @@ export class LoginDto {
   @IsString({ message: 'O domínio deve ser uma string.' })
   @IsOptional()
   domain?: string;
+
+  @IsBoolean({ message: 'isMobile deve ser um boolean.' })
+  @IsOptional()
+  isMobile?: boolean;
 }
