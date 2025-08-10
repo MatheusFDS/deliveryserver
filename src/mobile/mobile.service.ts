@@ -84,7 +84,6 @@ export class MobileService {
     const vehicle = driver
       ? await this.prisma.vehicle.findFirst({
           where: { driverId: driver.id, tenantId: tenantId },
-          // CORREÇÃO: camelCase
           include: { category: true },
         })
       : null;
@@ -121,7 +120,6 @@ export class MobileService {
 
     const deliveriesFromDb = await this.prisma.delivery.findMany({
       where: {
-        // CORREÇÃO: Renomeado para driverId
         driverId: driverId,
         tenantId,
         status: { in: statusFilter },
@@ -139,7 +137,6 @@ export class MobileService {
             },
           },
         },
-        // CORREÇÃO: camelCase
         driver: true,
         vehicle: true,
         paymentDeliveries: {
@@ -172,7 +169,6 @@ export class MobileService {
         freightValue: delivery.valorFrete,
         paymentStatus: paymentStatus,
         observacao: delivery.observacao,
-        // CORREÇÃO: camelCase
         vehicle: delivery.vehicle
           ? `${delivery.vehicle.model} (${delivery.vehicle.plate})`
           : 'Não informado',
@@ -211,7 +207,6 @@ export class MobileService {
 
     const deliveriesFromDb = await this.prisma.delivery.findMany({
       where: {
-        // CORREÇÃO: Renomeado para driverId
         driverId: driverId,
         tenantId,
         status: DeliveryStatus.FINALIZADO,
@@ -225,7 +220,6 @@ export class MobileService {
             },
           },
         },
-        // CORREÇÃO: camelCase
         driver: true,
         vehicle: true,
         paymentDeliveries: {
@@ -258,7 +252,6 @@ export class MobileService {
         freightValue: delivery.valorFrete,
         paymentStatus: paymentStatus,
         observacao: delivery.observacao,
-        // CORREÇÃO: camelCase
         vehicle: delivery.vehicle
           ? `${delivery.vehicle.model} (${delivery.vehicle.plate})`
           : 'Não informado',
@@ -297,7 +290,6 @@ export class MobileService {
 
     const deliveries = await this.prisma.delivery.findMany({
       where: {
-        // CORREÇÃO: Renomeado para driverId
         driverId: driverId,
         tenantId: tenantId,
         status: DeliveryStatus.FINALIZADO,
@@ -348,7 +340,6 @@ export class MobileService {
       where: {
         id: routeId,
         tenantId: tenantId,
-        // CORREÇÃO: Renomeado para driverId
         driverId: driverId,
       },
       include: {
@@ -360,7 +351,6 @@ export class MobileService {
             },
           },
         },
-        // CORREÇÃO: camelCase
         driver: true,
         vehicle: true,
       },
@@ -378,7 +368,6 @@ export class MobileService {
       status: this.mapRouteStatusToMobile(delivery.status),
       totalValue: delivery.totalValor,
       observacao: delivery.observacao,
-      // CORREÇÃO: camelCase
       vehicle: delivery.vehicle
         ? `${delivery.vehicle.model} (${delivery.vehicle.plate})`
         : 'Não informado',
@@ -422,11 +411,9 @@ export class MobileService {
       where: {
         id: orderId,
         tenantId,
-        // CORREÇÃO: camelCase e renomeado para driverId
         delivery: { driverId: driverId },
       },
       include: {
-        // CORREÇÃO: camelCase
         delivery: {
           select: {
             id: true,
@@ -465,7 +452,6 @@ export class MobileService {
       cpfCnpjDestinatario: order.cpfCnpj,
       nomeContato: order.nomeContato,
       emailDestinatario: order.email,
-      // CORREÇÃO: camelCase
       routeId: order.delivery?.id || null,
       routeStatus: order.delivery
         ? this.mapRouteStatusToMobile(order.delivery.status)
@@ -550,7 +536,6 @@ export class MobileService {
 
     const order = await this.prisma.order.findFirst({
       where: { id: orderId, tenantId },
-      // CORREÇÃO: camelCase
       include: { delivery: true },
     });
 
@@ -560,7 +545,6 @@ export class MobileService {
       );
     }
 
-    // CORREÇÃO: camelCase e renomeado para driverId
     if (order.delivery && order.delivery.driverId !== driverId) {
       throw new ForbiddenException(
         'Você não tem permissão para anexar comprovantes a este pedido.',
@@ -623,7 +607,6 @@ export class MobileService {
       await this.getDriverDetailsByUserId(userId);
 
     const order = await this.prisma.order.findFirst({
-      // CORREÇÃO: camelCase e renomeado para driverId
       where: { id: orderId, tenantId, delivery: { driverId: driverId } },
     });
 
@@ -635,7 +618,6 @@ export class MobileService {
 
     const proofs = await this.prisma.deliveryProof.findMany({
       where: { orderId, tenantId },
-      // CORREÇÃO: camelCase
       include: { driver: { select: { name: true } } },
       orderBy: { createdAt: 'desc' },
     });
@@ -644,7 +626,6 @@ export class MobileService {
       data: proofs.map((proof) => ({
         id: proof.id,
         proofUrl: proof.proofUrl,
-        // CORREÇÃO: camelCase
         driverName: proof.driver.name,
         createdAt: proof.createdAt,
       })),
@@ -653,30 +634,40 @@ export class MobileService {
     };
   }
 
+  // CORREÇÃO: Mapeamentos ajustados para serem consistentes com frontend
   private mapRouteStatusToMobile(statusBackend: DeliveryStatus): string {
     const mapping: Record<DeliveryStatus, string> = {
-      [DeliveryStatus.A_LIBERAR]: 'a_liberar',
-      [DeliveryStatus.INICIADO]: 'iniciado',
-      [DeliveryStatus.FINALIZADO]: 'finalizado',
-      [DeliveryStatus.REJEITADO]: 'rejeitado',
+      [DeliveryStatus.A_LIBERAR]: 'A_LIBERAR',
+      [DeliveryStatus.INICIADO]: 'INICIADO',
+      [DeliveryStatus.FINALIZADO]: 'FINALIZADO',
+      [DeliveryStatus.REJEITADO]: 'REJEITADO',
     };
     return mapping[statusBackend] || String(statusBackend);
   }
 
   private mapOrderStatusToMobile(statusBackend: OrderStatus): string {
     const mapping: Record<OrderStatus, string> = {
-      [OrderStatus.SEM_ROTA]: 'sem_rota',
-      [OrderStatus.EM_ROTA_AGUARDANDO_LIBERACAO]: 'aguardando_liberacao_rota',
-      [OrderStatus.EM_ROTA]: 'em_rota',
-      [OrderStatus.EM_ENTREGA]: 'em_entrega',
-      [OrderStatus.ENTREGUE]: 'entregue',
-      [OrderStatus.NAO_ENTREGUE]: 'nao_entregue',
+      [OrderStatus.SEM_ROTA]: 'SEM_ROTA',
+      [OrderStatus.EM_ROTA_AGUARDANDO_LIBERACAO]:
+        'EM_ROTA_AGUARDANDO_LIBERACAO',
+      [OrderStatus.EM_ROTA]: 'EM_ROTA',
+      [OrderStatus.EM_ENTREGA]: 'EM_ENTREGA',
+      [OrderStatus.ENTREGUE]: 'ENTREGUE',
+      [OrderStatus.NAO_ENTREGUE]: 'NAO_ENTREGUE',
     };
     return mapping[statusBackend] || String(statusBackend);
   }
 
+  // CORREÇÃO: Mapeamento do mobile para backend ajustado
   private mapMobileToOrderStatus(statusMobile: string): OrderStatus | null {
     const mapping: Record<string, OrderStatus> = {
+      // Mapeamentos diretos (UPPER_CASE)
+      EM_ROTA: OrderStatus.EM_ROTA,
+      EM_ENTREGA: OrderStatus.EM_ENTREGA,
+      ENTREGUE: OrderStatus.ENTREGUE,
+      NAO_ENTREGUE: OrderStatus.NAO_ENTREGUE,
+
+      // Mapeamentos alternativos para compatibilidade
       em_entrega: OrderStatus.EM_ENTREGA,
       iniciada: OrderStatus.EM_ENTREGA,
       entregue: OrderStatus.ENTREGUE,
@@ -684,19 +675,26 @@ export class MobileService {
       nao_entregue: OrderStatus.NAO_ENTREGUE,
       retornada: OrderStatus.NAO_ENTREGUE,
     };
-    return mapping[statusMobile?.toLowerCase()] || null;
+    return mapping[statusMobile] || null;
   }
 
   private mapMobileToDeliveryStatus(
     statusMobile: string,
   ): DeliveryStatus | null {
     const mapping: Record<string, DeliveryStatus> = {
+      // Mapeamentos diretos (UPPER_CASE)
+      A_LIBERAR: DeliveryStatus.A_LIBERAR,
+      INICIADO: DeliveryStatus.INICIADO,
+      FINALIZADO: DeliveryStatus.FINALIZADO,
+      REJEITADO: DeliveryStatus.REJEITADO,
+
+      // Mapeamentos alternativos para compatibilidade
       a_liberar: DeliveryStatus.A_LIBERAR,
       iniciado: DeliveryStatus.INICIADO,
       pendente: DeliveryStatus.INICIADO,
       finalizado: DeliveryStatus.FINALIZADO,
       rejeitado: DeliveryStatus.REJEITADO,
     };
-    return mapping[statusMobile?.toLowerCase()] || null;
+    return mapping[statusMobile] || null;
   }
 }
