@@ -34,10 +34,6 @@ export class TenantService {
     return user;
   }
 
-  // ==============================================================
-  // OPERAÇÕES DE TENANT - NÍVEL DE TENANT (Admin do Tenant)
-  // ==============================================================
-
   async getTenantByUserId(userId: string) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
@@ -92,10 +88,6 @@ export class TenantService {
       );
     }
   }
-
-  // ==============================================================
-  // OPERAÇÕES DE TENANT - NÍVEL DE PLATAFORMA (Superadmin)
-  // ==============================================================
 
   async createTenantByPlatformAdmin(
     createTenantDto: CreateTenantDto,
@@ -155,6 +147,7 @@ export class TenantService {
       where.OR = [
         { name: { contains: search, mode: 'insensitive' } },
         { domain: { contains: search, mode: 'insensitive' } },
+        { mobileDomain: { contains: search, mode: 'insensitive' } },
       ];
     }
 

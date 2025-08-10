@@ -3,7 +3,6 @@ import {
   IsNotEmpty,
   IsOptional,
   MaxLength,
-  IsFQDN,
   IsBoolean,
   IsNumber,
   IsInt,
@@ -29,17 +28,20 @@ export class CreateTenantDto {
   @IsNotEmpty({
     message: 'O domínio do tenant não pode estar vazio se fornecido.',
   })
-  @IsFQDN(
-    { require_tld: true, allow_underscores: false },
-    {
-      message:
-        'O domínio do tenant deve ser um nome de domínio válido e completo.',
-    },
-  )
   @MaxLength(255, {
     message: 'O domínio do tenant não pode ter mais de 255 caracteres.',
   })
   readonly domain?: string;
+
+  @IsOptional()
+  @IsString({ message: 'O domínio mobile do tenant deve ser uma string.' })
+  @IsNotEmpty({
+    message: 'O domínio mobile do tenant não pode estar vazio se fornecido.',
+  })
+  @MaxLength(255, {
+    message: 'O domínio mobile do tenant não pode ter mais de 255 caracteres.',
+  })
+  readonly mobileDomain?: string;
 
   @IsOptional()
   @IsBoolean({ message: 'O status ativo deve ser um valor booleano.' })
