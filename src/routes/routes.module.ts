@@ -1,56 +1,28 @@
-// =============================================================================
-// src/routes/routes.module.refactored.ts
-// =============================================================================
-// Módulo refatorado com todos os novos serviços
+// src/routes/routes.module.ts
+
 import { Module, forwardRef } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
-import { AuthModule } from 'src/auth/auth.module';
-import { UsersModule } from 'src/users/users.module';
-import { TenantModule } from 'src/tenant/tenant.module';
 
-// Controllers e Services
+// Módulos de negócio dos quais este módulo depende ou que dependem dele
+import { AuthModule } from '../auth/auth.module';
+import { UsersModule } from '../users/users.module';
+import { TenantModule } from '../tenant/tenant.module';
+
+// Componentes específicos do RoutesModule
 import { RoutesController } from './routes.controller';
 import { RoutesService } from './routes.service';
-
-// Adapters
-import { GoogleMapsAdapter } from './adapters/google-maps.adapter';
-
-// Services
-import { CacheService } from './services/cache.service';
-import { CircuitBreakerService } from './services/circuit-breaker.service';
-import { RetryService } from './services/retry.service';
-
-// Providers
 import { routesProviders } from './providers/routes.providers';
 
 @Module({
   imports: [
-    forwardRef(() => AuthModule),
     ConfigModule,
+    forwardRef(() => AuthModule),
     forwardRef(() => UsersModule),
     forwardRef(() => TenantModule),
   ],
   controllers: [RoutesController],
-  providers: [
-    // Core services
-    RoutesService,
-    PrismaService,
-
-    // Infrastructure services
-    CacheService,
-    CircuitBreakerService,
-    RetryService,
-
-    // Adapters
-    GoogleMapsAdapter,
-
-    // Dependency injection configuration
-    ...routesProviders,
-  ],
-  exports: [
-    RoutesService,
-    CacheService, // Exporta para outros módulos usarem
-  ],
+  providers: [RoutesService, PrismaService, ...routesProviders],
+  exports: [RoutesService],
 })
 export class RoutesModule {}

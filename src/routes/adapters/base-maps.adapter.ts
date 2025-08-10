@@ -1,21 +1,29 @@
-// =============================================================================
 // src/routes/adapters/base-maps.adapter.ts
-// =============================================================================
-// Classe base para todos os adapters de mapas
-import { Logger } from '@nestjs/common';
-import { CacheService } from '../services/cache.service';
-import { CircuitBreakerService } from '../services/circuit-breaker.service';
-import { RetryService } from '../services/retry.service';
+
+import { Inject, Logger } from '@nestjs/common';
 import { MapsConfig } from '../config/maps.config';
+import {
+  ICacheService,
+  CACHE_SERVICE,
+} from '../../infrastructure/cache/cache.interface';
+import {
+  ICircuitBreakerService,
+  CIRCUIT_BREAKER_SERVICE,
+} from '../../infrastructure/resilience/circuit-breaker.interface';
+import {
+  IRetryService,
+  RETRY_SERVICE,
+} from '../../infrastructure/resilience/retry.interface';
 
 export abstract class BaseMapsAdapter {
   protected readonly logger = new Logger(this.constructor.name);
 
   constructor(
     protected readonly config: MapsConfig,
-    protected readonly cacheService: CacheService,
-    protected readonly circuitBreaker: CircuitBreakerService,
-    protected readonly retryService: RetryService,
+    @Inject(CACHE_SERVICE) protected readonly cacheService: ICacheService,
+    @Inject(CIRCUIT_BREAKER_SERVICE)
+    protected readonly circuitBreaker: ICircuitBreakerService,
+    @Inject(RETRY_SERVICE) protected readonly retryService: IRetryService,
   ) {}
 
   protected async withCache<T>(
@@ -42,22 +50,13 @@ export abstract class BaseMapsAdapter {
     circuitName: string,
     operation: () => Promise<T>,
   ): Promise<T> {
-    return this.circuitBreaker.execute(
-      circuitName,
-      () => this.retryService.executeWithRetry(operation),
-      {
-        failureThreshold: 5,
-        resetTimeout: 60000,
-        monitoringPeriod: 300000,
-      },
+    return this.circuitBreaker.execute(circuitName, () =>
+      this.retryService.executeWithRetry(operation, {}, circuitName),
     );
   }
 
   protected sanitizeAddress(address: string): string {
-    return address
-      .trim()
-      .replace(/[<>]/g, '') // Remove caracteres perigosos
-      .substring(0, 200); // Limita tamanho
+    return address.trim().replace(/[<>]/g, '').substring(0, 200);
   }
 
   protected validateLatLng(latLng: any): boolean {

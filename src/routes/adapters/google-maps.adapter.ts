@@ -1,9 +1,6 @@
-// =============================================================================
-// src/routes/adapters/google-maps.adapter.refactored.ts
-// =============================================================================
-// Versão refatorada do adapter do Google Maps
-import { Injectable, BadRequestException } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
+// src/routes/adapters/google-maps.adapter.ts
+
+import { Injectable, BadRequestException, Inject } from '@nestjs/common';
 import axios, { AxiosInstance } from 'axios';
 import { IMapsAdapter } from '../interfaces/maps-adapter.interface';
 import {
@@ -17,15 +14,22 @@ import {
 import { OptimizeRouteDto } from '../dto/optimize-route.dto';
 import { BaseMapsAdapter } from './base-maps.adapter';
 import { MapsConfigFactory } from '../config/maps.config';
-import { CacheService } from '../services/cache.service';
-import { CircuitBreakerService } from '../services/circuit-breaker.service';
-import { RetryService } from '../services/retry.service';
 import {
   ApiKeyInvalidException,
-  QuotaExceededException,
-  LocationNotFoundException,
-  NetworkTimeoutException,
+  MapsExceptionFactory,
 } from '../exceptions/maps.exceptions';
+import {
+  ICacheService,
+  CACHE_SERVICE,
+} from '../../infrastructure/cache/cache.interface';
+import {
+  ICircuitBreakerService,
+  CIRCUIT_BREAKER_SERVICE,
+} from '../../infrastructure/resilience/circuit-breaker.interface';
+import {
+  IRetryService,
+  RETRY_SERVICE,
+} from '../../infrastructure/resilience/retry.interface';
 
 @Injectable()
 export class GoogleMapsAdapter extends BaseMapsAdapter implements IMapsAdapter {
@@ -38,10 +42,9 @@ export class GoogleMapsAdapter extends BaseMapsAdapter implements IMapsAdapter {
   };
 
   constructor(
-    configService: ConfigService,
-    cacheService: CacheService,
-    circuitBreaker: CircuitBreakerService,
-    retryService: RetryService,
+    @Inject(CACHE_SERVICE) cacheService: ICacheService,
+    @Inject(CIRCUIT_BREAKER_SERVICE) circuitBreaker: ICircuitBreakerService,
+    @Inject(RETRY_SERVICE) retryService: IRetryService,
   ) {
     const config = MapsConfigFactory.create('google');
     super(config, cacheService, circuitBreaker, retryService);
@@ -52,80 +55,45 @@ export class GoogleMapsAdapter extends BaseMapsAdapter implements IMapsAdapter {
 
     this.httpClient = axios.create({
       timeout: config.timeout,
-      headers: {
-        'User-Agent': 'LogisticsSaaS/1.0',
-      },
+      headers: { 'User-Agent': 'LogisticsSaaS/1.0' },
     });
 
     this.setupInterceptors();
   }
 
   private setupInterceptors() {
-    // Request interceptor para logging
     this.httpClient.interceptors.request.use((config) => {
-      this.logger.debug(`Making request to: ${config.url}`);
+      this.logger.debug(`Requesting URL: ${config.url}`);
       return config;
     });
 
-    // Response interceptor para tratamento de erros
     this.httpClient.interceptors.response.use(
       (response) => response,
       (error) => {
-        this.handleHttpError(error);
-        return Promise.reject(error);
+        throw MapsExceptionFactory.fromNetworkError(error, 'GoogleMaps');
       },
     );
-  }
-
-  private handleHttpError(error: any) {
-    if (error.code === 'ECONNABORTED') {
-      throw new NetworkTimeoutException(
-        'Timeout na requisição para Google Maps',
-      );
-    }
-
-    if (error.response) {
-      const status = error.response.status;
-      const data = error.response.data;
-
-      switch (status) {
-        case 401:
-        case 403:
-          throw new ApiKeyInvalidException(
-            'API Key inválida ou sem permissões',
-          );
-        case 429:
-          throw new QuotaExceededException('Cota da API Google Maps excedida');
-        case 404:
-          throw new LocationNotFoundException('Localização não encontrada');
-        default:
-          this.logger.error(`HTTP Error ${status}:`, data);
-      }
-    }
   }
 
   async optimizeRoute(
     options: OptimizeRouteDto,
   ): Promise<OptimizedRouteResult> {
-    const cacheKey = this.cacheService.generateKey('optimize_route', {
+    const cacheKey = this.cacheService.generateKey('gmaps_optimize', {
       startingPoint: options.startingPoint,
-      orders: options.orders.map((o) => o.address),
+      orders: options.orders.map((o) => o.address).sort(),
     });
 
-    return this.withCache(cacheKey, async () => {
-      return this.executeWithResilience('google_optimize_route', async () => {
-        const { startingPoint, orders } = options;
-        const waypoints = orders
+    return this.withCache(cacheKey, () =>
+      this.executeWithResilience('gmaps_optimize_route', async () => {
+        const waypoints = options.orders
           .map((order) => this.sanitizeAddress(order.address))
           .join('|');
-
         const params = {
-          origin: this.sanitizeAddress(startingPoint),
-          destination: this.sanitizeAddress(startingPoint),
+          origin: this.sanitizeAddress(options.startingPoint),
+          destination: this.sanitizeAddress(options.startingPoint),
           waypoints: `optimize:true|${waypoints}`,
           key: this.config.apiKey,
           language: 'pt-BR',
-          region: 'BR',
           units: 'metric',
         };
 
@@ -134,17 +102,17 @@ export class GoogleMapsAdapter extends BaseMapsAdapter implements IMapsAdapter {
         });
 
         if (response.data.status !== 'OK' || !response.data.routes[0]) {
-          throw new BadRequestException(
-            `Erro ao otimizar rota: ${response.data.status} - ${response.data.error_message || ''}`,
+          throw MapsExceptionFactory.fromGoogleMapsStatus(
+            response.data.status,
+            response.data.error_message,
           );
         }
-
-        return this.transformDirectionsResponseToOptimizedRouteResult(
+        return this.transformDirectionsResponseToOptimizedRoute(
           response.data,
           options,
         );
-      });
-    });
+      }),
+    );
   }
 
   async calculateDistance(
@@ -155,58 +123,46 @@ export class GoogleMapsAdapter extends BaseMapsAdapter implements IMapsAdapter {
       typeof origin === 'string'
         ? this.sanitizeAddress(origin)
         : `${origin.lat},${origin.lng}`;
-
     const destinationStr =
       typeof destination === 'string'
         ? this.sanitizeAddress(destination)
         : `${destination.lat},${destination.lng}`;
-
-    const cacheKey = this.cacheService.generateKey('distance', {
+    const cacheKey = this.cacheService.generateKey('gmaps_distance', {
       origin: originStr,
       destination: destinationStr,
     });
 
-    return this.withCache(cacheKey, async () => {
-      return this.executeWithResilience('google_distance', async () => {
+    return this.withCache(cacheKey, () =>
+      this.executeWithResilience('gmaps_distance', async () => {
         const params = {
           origins: originStr,
           destinations: destinationStr,
           key: this.config.apiKey,
           language: 'pt-BR',
-          units: 'metric',
         };
-
         const response = await this.httpClient.get(
           this.baseUrls.distanceMatrix,
           { params },
         );
+        const element = response.data?.rows?.[0]?.elements?.[0];
 
-        if (response.data.status !== 'OK') {
-          throw new BadRequestException(
-            `Erro ao calcular distância: ${response.data.status} - ${response.data.error_message || ''}`,
+        if (response.data.status !== 'OK' || element?.status !== 'OK') {
+          throw MapsExceptionFactory.fromGoogleMapsStatus(
+            element?.status || response.data.status,
+            'Cannot calculate distance',
           );
         }
-
-        const element = response.data.rows[0]?.elements[0];
-        if (!element || element.status !== 'OK') {
-          throw new LocationNotFoundException(
-            'Não foi possível calcular a distância entre os pontos',
-          );
-        }
-
         return {
           distanceInMeters: element.distance.value,
           durationInSeconds: element.duration.value,
         };
-      });
-    });
+      }),
+    );
   }
 
   async geocodeAddresses(addresses: string[]): Promise<GeocodeResult[]> {
-    // Processa em lotes para evitar rate limiting
     const batchSize = Math.min(addresses.length, this.config.maxBatchSize);
     const results: GeocodeResult[] = [];
-
     for (let i = 0; i < addresses.length; i += batchSize) {
       const batch = addresses.slice(i, i + batchSize);
       const batchResults = await Promise.all(
@@ -214,25 +170,22 @@ export class GoogleMapsAdapter extends BaseMapsAdapter implements IMapsAdapter {
       );
       results.push(...batchResults);
     }
-
     return results;
   }
 
   private async geocodeSingleAddress(address: string): Promise<GeocodeResult> {
     const sanitizedAddress = this.sanitizeAddress(address);
-    const cacheKey = this.cacheService.generateKey('geocode', {
+    const cacheKey = this.cacheService.generateKey('gmaps_geocode', {
       address: sanitizedAddress,
     });
 
-    return this.withCache(cacheKey, async () => {
-      return this.executeWithResilience('google_geocode', async () => {
+    return this.withCache(cacheKey, () =>
+      this.executeWithResilience('gmaps_geocode', async () => {
         const params = {
           address: sanitizedAddress,
           key: this.config.apiKey,
           language: 'pt-BR',
-          region: 'BR',
         };
-
         const response = await this.httpClient.get(this.baseUrls.geocode, {
           params,
         });
@@ -256,8 +209,8 @@ export class GoogleMapsAdapter extends BaseMapsAdapter implements IMapsAdapter {
             error: response.data.status,
           };
         }
-      });
-    });
+      }),
+    );
   }
 
   async calculateInteractiveRoute(
@@ -271,65 +224,54 @@ export class GoogleMapsAdapter extends BaseMapsAdapter implements IMapsAdapter {
       );
     }
 
-    const cacheKey = this.cacheService.generateKey('interactive_route', {
+    const cacheKey = this.cacheService.generateKey('gmaps_interactive_route', {
       origin,
       destination,
       waypoints,
     });
+    return this.withCache(cacheKey, () =>
+      this.executeWithResilience('gmaps_interactive_route', async () => {
+        const params: any = {
+          origin: `${origin.lat},${origin.lng}`,
+          destination: `${destination.lat},${destination.lng}`,
+          key: this.config.apiKey,
+        };
+        if (waypoints.length > 0) {
+          params.waypoints = waypoints
+            .filter((wp) => this.validateLatLng(wp))
+            .map((wp) => `${wp.lat},${wp.lng}`)
+            .join('|');
+        }
 
-    return this.withCache(cacheKey, async () => {
-      return this.executeWithResilience(
-        'google_interactive_route',
-        async () => {
-          const params: any = {
-            origin: `${origin.lat},${origin.lng}`,
-            destination: `${destination.lat},${destination.lng}`,
-            key: this.config.apiKey,
-            language: 'pt-BR',
-            units: 'metric',
-          };
+        const response = await this.httpClient.get(this.baseUrls.directions, {
+          params,
+        });
+        if (response.data.status !== 'OK' || !response.data.routes[0]) {
+          throw MapsExceptionFactory.fromGoogleMapsStatus(response.data.status);
+        }
 
-          if (waypoints.length > 0) {
-            params.waypoints = waypoints
-              .filter((wp) => this.validateLatLng(wp))
-              .map((wp) => `${wp.lat},${wp.lng}`)
-              .join('|');
-          }
-
-          const response = await this.httpClient.get(this.baseUrls.directions, {
-            params,
-          });
-
-          if (response.data.status !== 'OK' || !response.data.routes[0]) {
-            throw new BadRequestException(
-              `Erro ao calcular rota interativa: ${response.data.status}`,
-            );
-          }
-
-          const route = response.data.routes[0];
-          let totalDistanceInMeters = 0;
-          let totalDurationInSeconds = 0;
-
-          const legs = route.legs.map((leg: any) => {
-            totalDistanceInMeters += leg.distance.value;
-            totalDurationInSeconds += leg.duration.value;
-            return {
-              startAddress: leg.start_address,
-              endAddress: leg.end_address,
-              distanceInMeters: leg.distance.value,
-              durationInSeconds: leg.duration.value,
-            };
-          });
-
+        const route = response.data.routes[0];
+        let totalDistance = 0;
+        let totalDuration = 0;
+        const legs = route.legs.map((leg: any) => {
+          totalDistance += leg.distance.value;
+          totalDuration += leg.duration.value;
           return {
-            totalDistanceInMeters,
-            totalDurationInSeconds,
-            polyline: route.overview_polyline.points,
-            legs,
+            startAddress: leg.start_address,
+            endAddress: leg.end_address,
+            distanceInMeters: leg.distance.value,
+            durationInSeconds: leg.duration.value,
           };
-        },
-      );
-    });
+        });
+
+        return {
+          totalDistanceInMeters: totalDistance,
+          totalDurationInSeconds: totalDuration,
+          polyline: route.overview_polyline.points,
+          legs,
+        };
+      }),
+    );
   }
 
   async generateStaticMapUrl(options: {
@@ -342,11 +284,9 @@ export class GoogleMapsAdapter extends BaseMapsAdapter implements IMapsAdapter {
       maptype: 'roadmap',
       key: this.config.apiKey,
     });
-
     if (options.polyline) {
       params.append('path', `weight:3|color:blue|enc:${options.polyline}`);
     }
-
     options.markers.forEach((marker) => {
       if (this.validateLatLng(marker.location)) {
         params.append(
@@ -355,20 +295,15 @@ export class GoogleMapsAdapter extends BaseMapsAdapter implements IMapsAdapter {
         );
       }
     });
-
-    return {
-      mapUrl: `${this.baseUrls.staticMap}?${params.toString()}`,
-    };
+    return { mapUrl: `${this.baseUrls.staticMap}?${params.toString()}` };
   }
 
-  private transformDirectionsResponseToOptimizedRouteResult(
+  private transformDirectionsResponseToOptimizedRoute(
     googleResponse: any,
     originalOptions: OptimizeRouteDto,
   ): OptimizedRouteResult {
-    // Implementação mantida igual à original, mas com melhor tratamento de erros
     const route = googleResponse.routes[0];
     const { startingPoint, orders } = originalOptions;
-
     let totalDistanceInMeters = 0;
     let totalDurationInSeconds = 0;
 
@@ -377,13 +312,10 @@ export class GoogleMapsAdapter extends BaseMapsAdapter implements IMapsAdapter {
         (waypointIndex: number, optimizedIndex: number) => {
           const originalOrder = orders[waypointIndex];
           const leg = route.legs[optimizedIndex];
-
           const distance = leg?.distance?.value || 0;
           const duration = leg?.duration?.value || 0;
-
           totalDistanceInMeters += distance;
           totalDurationInSeconds += duration;
-
           return {
             id: originalOrder.id,
             address: originalOrder.address,
@@ -408,9 +340,9 @@ export class GoogleMapsAdapter extends BaseMapsAdapter implements IMapsAdapter {
       totalDurationInSeconds,
       polyline: route.overview_polyline.points,
       hasTolls: route.warnings.some(
-        (warning: string) =>
-          warning.toLowerCase().includes('pedágio') ||
-          warning.toLowerCase().includes('tolls'),
+        (w: string) =>
+          w.toLowerCase().includes('pedágio') ||
+          w.toLowerCase().includes('tolls'),
       ),
       mapUrl: this.buildStaticMapUrl(
         [{ id: 'start', address: startingPoint }, ...optimizedWaypoints],
@@ -425,18 +357,15 @@ export class GoogleMapsAdapter extends BaseMapsAdapter implements IMapsAdapter {
       maptype: 'roadmap',
       key: this.config.apiKey,
     });
-
     params.append('path', `weight:3|color:blue|enc:${polyline}`);
-
     waypoints.forEach((waypoint, index) => {
-      const label = index === 0 ? 'P' : index.toString();
+      const label = index === 0 ? 'P' : `${index}`;
       const color = index === 0 ? 'green' : 'red';
       params.append(
         'markers',
         `color:${color}|label:${label}|${this.sanitizeAddress(waypoint.address)}`,
       );
     });
-
     return `${this.baseUrls.staticMap}?${params.toString()}`;
   }
 }

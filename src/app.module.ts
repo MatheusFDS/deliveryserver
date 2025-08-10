@@ -1,6 +1,14 @@
+// src/app.module.ts
+
 import { Module, NestModule, MiddlewareConsumer } from '@nestjs/common';
+import { ConfigModule } from '@nestjs/config';
 import { LoggerMiddleware } from './middleware/logger.middleware';
+
+// Módulos de Infraestrutura e Core
+import { InfrastructureModule } from './infrastructure/infrastructure.module';
 import { PrismaModule } from './prisma/prisma.module';
+
+// Módulos de Negócio
 import { UsersModule } from './users/users.module';
 import { AuthModule } from './auth/auth.module';
 import { DriversModule } from './drivers/drivers.module';
@@ -20,12 +28,18 @@ import { RoutesModule } from './routes/routes.module';
 
 @Module({
   imports: [
+    ConfigModule.forRoot({
+      isGlobal: true,
+    }),
+
+    InfrastructureModule,
+
+    PrismaModule,
     OrdersModule,
     StatisticsModule,
     PaymentsModule,
     CategoryModule,
     DirectionsModule,
-    PrismaModule,
     TenantModule,
     UsersModule,
     AuthModule,
@@ -39,7 +53,7 @@ import { RoutesModule } from './routes/routes.module';
     RoutesModule,
   ],
   controllers: [],
-  providers: [LoggerMiddleware],
+  providers: [],
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {
