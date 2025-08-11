@@ -5,6 +5,7 @@ import {
   BadRequestException,
   ForbiddenException,
   UnauthorizedException,
+  Logger,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateDeliveryDto } from './dto/create-delivery.dto';
@@ -45,6 +46,7 @@ export class DeliveryService {
     @Inject(AUDIT_PROVIDER) private readonly auditProvider: IAuditProvider,
     @Inject(NOTIFICATION_PROVIDER)
     private readonly notificationProvider: INotificationProvider,
+    private readonly logger = new Logger(DeliveryService.name),
   ) {}
 
   private async getTenantIdFromUserId(userId: string): Promise<string> {
@@ -507,47 +509,27 @@ export class DeliveryService {
       },
     });
 
+    // Atualizar status do delivery se necessário
     if (remainingOrders === 0) {
       await this.prisma.delivery.update({
         where: { id: order.deliveryId! },
         data: { status: DeliveryStatus.FINALIZADO, dataFim: new Date() },
       });
 
-      const adminUsers = await this.getAdminUsers(driver.tenantId);
-      for (const adminUserId of adminUsers) {
-        await this.notificationProvider.send({
-          recipient: { userId: adminUserId },
-          channels: ['push', 'email'],
-          templateId: 'delivery-completed',
-          data: {
-            deliveryId: order.deliveryId,
-            driverName: order.delivery.driver.name,
-            tenantId: driver.tenantId,
-            linkTo: `/entregas/${order.deliveryId}`,
-          },
-        });
-      }
-    }
-
-    const adminUsers = await this.getAdminUsers(driver.tenantId);
-    for (const adminUserId of adminUsers) {
-      await this.notificationProvider.send({
-        recipient: { userId: adminUserId },
-        channels: ['push', 'email'],
-        templateId: 'order-status-changed',
-        data: {
-          orderId,
-          newStatus,
-          oldStatus: order.status,
-          deliveryId: order.deliveryId,
-          customerName: order.cliente,
-          driverName: order.delivery.driver.name,
-          tenantId: driver.tenantId,
-          linkTo: `/entregas/${order.deliveryId}`,
-        },
+      // Enviar notificação de delivery finalizado de forma assíncrona
+      this.sendDeliveryCompletedNotifications(
+        order.deliveryId!,
+        order.delivery.driver.name,
+        driver.tenantId,
+      ).catch((error) => {
+        this.logger.error(
+          'Erro ao enviar notificações de delivery finalizado:',
+          error,
+        );
       });
     }
 
+    // Registrar auditoria
     await this.auditProvider.logAction({
       userId,
       tenantId: driver.tenantId,
@@ -557,9 +539,122 @@ export class DeliveryService {
       timestamp: new Date(),
     });
 
+    // Enviar notificação de mudança de status de forma assíncrona
+    this.sendOrderStatusChangeNotifications({
+      orderId,
+      newStatus,
+      oldStatus: order.status,
+      deliveryId: order.deliveryId!,
+      customerName: order.cliente,
+      driverName: order.delivery.driver.name,
+      tenantId: driver.tenantId,
+      adminUsers: await this.getAdminUsers(driver.tenantId),
+    }).catch((error) => {
+      this.logger.error(
+        'Erro ao enviar notificações de mudança de status:',
+        error,
+      );
+    });
+
     return updatedOrder;
   }
 
+  // Método privado para enviar notificações de delivery finalizado
+  private async sendDeliveryCompletedNotifications(
+    deliveryId: string,
+    driverName: string,
+    tenantId: string,
+  ): Promise<void> {
+    try {
+      const adminUsers = await this.getAdminUsers(tenantId);
+
+      // Enviar notificações em paralelo, mas capturar erros individualmente
+      const notificationPromises = adminUsers.map(async (adminUserId) => {
+        try {
+          await this.notificationProvider.send({
+            recipient: { userId: adminUserId },
+            channels: ['push', 'email'],
+            templateId: 'delivery-completed',
+            data: {
+              deliveryId,
+              driverName,
+              tenantId,
+              linkTo: `/entregas/${deliveryId}`,
+            },
+          });
+          this.logger.log(
+            `Notificação de delivery finalizado enviada para usuário ${adminUserId}`,
+          );
+        } catch (error) {
+          this.logger.error(
+            `Erro ao enviar notificação de delivery finalizado para usuário ${adminUserId}:`,
+            error,
+          );
+        }
+      });
+
+      await Promise.allSettled(notificationPromises);
+    } catch (error) {
+      this.logger.error(
+        'Erro geral ao enviar notificações de delivery finalizado:',
+        error,
+      );
+      throw error;
+    }
+  }
+
+  // Método privado para enviar notificações de mudança de status
+  private async sendOrderStatusChangeNotifications(params: {
+    orderId: string;
+    newStatus: OrderStatus;
+    oldStatus: OrderStatus;
+    deliveryId: string;
+    customerName: string;
+    driverName: string;
+    tenantId: string;
+    adminUsers: string[];
+  }): Promise<void> {
+    try {
+      // Enviar notificações em paralelo, mas capturar erros individualmente
+      const notificationPromises = params.adminUsers.map(
+        async (adminUserId) => {
+          try {
+            await this.notificationProvider.send({
+              recipient: { userId: adminUserId },
+              channels: ['push', 'email'],
+              templateId: 'order-status-changed',
+              data: {
+                orderId: params.orderId,
+                newStatus: params.newStatus,
+                oldStatus: params.oldStatus,
+                deliveryId: params.deliveryId,
+                customerName: params.customerName,
+                driverName: params.driverName,
+                tenantId: params.tenantId,
+                linkTo: `/entregas/${params.deliveryId}`,
+              },
+            });
+            this.logger.log(
+              `Notificação de mudança de status enviada para usuário ${adminUserId}`,
+            );
+          } catch (error) {
+            this.logger.error(
+              `Erro ao enviar notificação de mudança de status para usuário ${adminUserId}:`,
+              error,
+            );
+          }
+        },
+      );
+
+      await Promise.allSettled(notificationPromises);
+    } catch (error) {
+      this.logger.error(
+        'Erro geral ao enviar notificações de mudança de status:',
+        error,
+      );
+      throw error;
+    }
+  }
   async update(
     id: string,
     updateDeliveryDto: UpdateDeliveryDto,
