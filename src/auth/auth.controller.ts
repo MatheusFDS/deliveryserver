@@ -34,10 +34,11 @@ export class AuthController {
   @UseGuards(JwtAuthGuard)
   @Get('debug')
   async debug(@Request() req) {
-    this.logger.debug(`Usuario debug: ${JSON.stringify(req.user)}`);
+    this.logger.debug(`🐛 Usuario debug: ${JSON.stringify(req.user)}`);
     return {
       user: req.user,
       timestamp: new Date().toISOString(),
+      message: 'Autenticação funcionando!',
     };
   }
 }

@@ -1,5 +1,4 @@
 import { Module, forwardRef } from '@nestjs/common';
-import { PassportModule } from '@nestjs/passport';
 import { PrismaModule } from '../prisma/prisma.module';
 import { UsersModule } from '../users/users.module';
 import { TenantModule } from '../tenant/tenant.module';
@@ -11,7 +10,6 @@ import { FirebaseAuthProvider } from '../infrastructure/auth/firebase-auth.provi
 
 @Module({
   imports: [
-    PassportModule,
     PrismaModule,
     forwardRef(() => UsersModule),
     forwardRef(() => TenantModule),

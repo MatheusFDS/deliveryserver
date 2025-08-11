@@ -38,27 +38,32 @@ export class UsersController {
   @Get('debug')
   async debugUser(@Req() req: Request) {
     this.logger.debug(
-      `Debug users - Usuario: ${JSON.stringify(req.user as any)}`,
+      `🐛 Debug users - Usuario: ${JSON.stringify(req.user as any)}`,
     );
     return {
       user: req.user,
       timestamp: new Date().toISOString(),
+      message: 'Debug endpoint funcionando!',
     };
   }
 
   @Post()
-  @Roles('admin')
+  @Roles('admin') // superadmin vai passar por causa do RolesGuard atualizado
   async invite(@Body() inviteUserDto: InviteUserDto, @Req() req: Request) {
     this.logger.debug(
-      `Tentativa de convite por: ${JSON.stringify(req.user as any)}`,
+      `📧 Tentativa de convite por: ${JSON.stringify(req.user as any)}`,
     );
-    this.logger.debug(`Role do usuário: ${(req.user as any)?.role}`);
+    this.logger.debug(`👤 Role do usuário: ${(req.user as any)?.role}`);
+    this.logger.debug(`📝 Dados do convite: ${JSON.stringify(inviteUserDto)}`);
 
     const requestingUserId = (req.user as any).userId;
-    return this.usersService.inviteUserForTenant(
+    const result = await this.usersService.inviteUserForTenant(
       inviteUserDto,
       requestingUserId,
     );
+
+    this.logger.debug(`✅ Convite criado com sucesso`);
+    return result;
   }
 
   @Get()
