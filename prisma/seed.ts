@@ -74,24 +74,53 @@ async function main() {
     process.exit(1);
   }
 
-  const existingSuperAdmin = await prisma.user.findUnique({
+  let superAdminUser = await prisma.user.findUnique({
     where: { email: saEmail },
   });
 
-  if (!existingSuperAdmin) {
+  if (!superAdminUser) {
     const hashedPassword = await bcrypt.hash(saPassword, 10);
-    const superAdminUser = await prisma.user.create({
+    superAdminUser = await prisma.user.create({
       data: {
         email: saEmail,
         password: hashedPassword,
         name: saName,
-        roleId: superAdminRole.id, // Atribui a role 'superadmin'
+        roleId: superAdminRole.id,
         tenantId: null,
+        isActive: true,
       },
     });
     console.log('Usuário Super Admin criado:', superAdminUser);
   } else {
-    console.log('Usuário Super Admin já existe:', existingSuperAdmin.email);
+    console.log('Usuário Super Admin já existe:', superAdminUser.email);
+  }
+
+  // 3. Criar convite para o Super Admin (se não existir)
+  const existingInvite = await prisma.userInvite.findUnique({
+    where: {
+      email_tenantId: {
+        email: saEmail,
+        tenantId: null,
+      },
+    },
+  });
+
+  if (!existingInvite) {
+    const invite = await prisma.userInvite.create({
+      data: {
+        email: saEmail,
+        tenantId: null,
+        roleId: superAdminRole.id,
+        status: 'PENDING',
+        expiresAt: new Date(
+          new Date().setFullYear(new Date().getFullYear() + 1),
+        ), // 1 ano de validade
+        invitedBy: 'system', // ou id válido de usuário que criou o convite
+      },
+    });
+    console.log('Convite para Super Admin criado:', invite);
+  } else {
+    console.log('Convite para Super Admin já existe:', existingInvite.id);
   }
 
   console.log(`Seed finalizado.`);

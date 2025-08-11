@@ -405,11 +405,10 @@ model Notification {
   @@index([userId, isRead])
 }
 
-// NOVO MODELO: Para gerenciar convites
 model UserInvite {
   id          String       @id @default(uuid())
   email       String       // Email do convidado
-  tenantId    String       // Tenant para o qual foi convidado
+  tenantId    String?      // MUDANÇA: String? para permitir null (super admin)
   roleId      String       // Role que será atribuída
   status      InviteStatus @default(PENDING)
   expiresAt   DateTime     // Data de expiração do convite
@@ -417,9 +416,9 @@ model UserInvite {
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
 
-  tenant      Tenant       @relation(fields: [tenantId], references: [id])
+  tenant      Tenant?      @relation(fields: [tenantId], references: [id]) // MUDANÇA: Tenant? 
   role        Role         @relation(fields: [roleId], references: [id])
   
-  @@unique([email, tenantId]) // Garante que um email só pode ser convidado uma vez para o mesmo tenant
+  @@unique([email, tenantId]) // Mantém a unicidade
   @@index([email])
 }

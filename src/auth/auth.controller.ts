@@ -28,9 +28,9 @@ export class AuthController {
   @UseGuards(JwtAuthGuard)
   @Post('logout')
   async logout(@Request() req) {
-    // Opcional: Se precisarmos do firebaseUid para revogar tokens
-    // const firebaseUid = req.user.firebaseUid; // O Guard precisaria anexar isso
-    await this.authService.logout(req.user.userId); // Passando nosso ID por enquanto
+    // CORREÇÃO: Usar o firebaseUid em vez do userId
+    const firebaseUid = req.user.firebaseUid;
+    await this.authService.logout(firebaseUid);
     return { message: 'Sessão invalidada quando aplicável.' };
   }
 }
