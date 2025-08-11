@@ -1,22 +1,22 @@
+// src/auth/jwt-auth.guard.ts
+
 import {
   ExecutionContext,
   Injectable,
   InternalServerErrorException,
   UnauthorizedException,
+  Inject,
 } from '@nestjs/common';
-import { Reflector } from '@nestjs/core';
 import { AuthGuard } from '@nestjs/passport';
-import { AuthService } from './auth.service';
-import { UsersService } from '../users/users.service';
-import { TenantService } from '../tenant/tenant.service';
+import {
+  IAuthProvider,
+  AUTH_PROVIDER,
+} from '../infrastructure/auth/auth.provider.interface';
 
 @Injectable()
 export class JwtAuthGuard extends AuthGuard('jwt') {
   constructor(
-    private reflector: Reflector,
-    private authService: AuthService,
-    private usersService: UsersService,
-    private tenantService: TenantService,
+    @Inject(AUTH_PROVIDER) private readonly authProvider: IAuthProvider,
   ) {
     super();
   }
@@ -29,37 +29,23 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
       throw new UnauthorizedException('Token de autenticação não fornecido.');
     }
 
-    if (await this.authService.isTokenInvalid(token)) {
-      throw new UnauthorizedException(
-        'Sessão expirada ou inválida. Por favor, faça login novamente.',
-      );
-    }
-
-    const canActivateParent = (await super.canActivate(context)) as boolean;
-    if (!canActivateParent) {
-      throw new UnauthorizedException('Autenticação falhou.');
-    }
-
-    const userPayload = request.user;
-
-    if (!userPayload || !userPayload.userId) {
-      throw new UnauthorizedException(
-        'Informações do usuário não disponíveis no token.',
-      );
-    }
-
     try {
-      const dbUser = await this.usersService.findOneById(userPayload.userId);
-      if (!dbUser || !dbUser.isActive) {
-        throw new UnauthorizedException('Usuário inativo ou não encontrado.');
+      const decodedToken = await this.authProvider.validateToken(token);
+
+      const userFromDb = await this.authProvider.findOrCreateUser(decodedToken);
+
+      if (!userFromDb || !userFromDb.isActive) {
+        throw new UnauthorizedException(
+          'Usuário inativo ou não encontrado no sistema.',
+        );
       }
 
-      if (dbUser.tenantId) {
-        const tenant = await this.tenantService.getTenantByUserId(dbUser.id);
-        if (!tenant || !tenant.isActive) {
-          throw new UnauthorizedException('Tenant inativo.');
-        }
-      }
+      request.user = {
+        userId: userFromDb.id,
+        email: userFromDb.email,
+        role: userFromDb.roleId,
+        tenantId: userFromDb.tenantId,
+      };
 
       return true;
     } catch (error) {
@@ -67,18 +53,22 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
         throw error;
       }
       throw new InternalServerErrorException(
-        'Erro na validação de permissões de acesso.',
+        'Erro ao validar a autenticação do usuário.',
       );
     }
   }
 
   private extractTokenFromHeader(request: any): string | null {
     const authHeader = request.headers.authorization;
-    if (!authHeader) {
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
       return null;
     }
-
-    const [, token] = authHeader.split(' ');
-    return token;
+    return authHeader.split(' ')[1];
+  }
+  handleRequest(err, user) {
+    if (err || !user) {
+      throw err || new UnauthorizedException();
+    }
+    return user;
   }
 }

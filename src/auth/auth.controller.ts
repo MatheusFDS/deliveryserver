@@ -1,27 +1,36 @@
-import { Controller, Post, Body, Request, UseGuards } from '@nestjs/common';
+// src/auth/auth.controller.ts
+
+import { Controller, Post, Request, UseGuards, Get } from '@nestjs/common';
 import { AuthService } from './auth.service';
-import { LoginDto } from './dto/login.dto';
 import { JwtAuthGuard } from './jwt-auth.guard';
 
 @Controller('auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
-  @Post('login')
-  async login(@Body() loginDto: LoginDto) {
-    return this.authService.login(loginDto);
-  }
-
-  @Post('refresh-token')
-  async refreshToken(@Body('refresh_token') refreshToken: string) {
-    return this.authService.refreshToken(refreshToken);
-  }
-
-  @Post('logout')
+  /**
+   * Endpoint para estabelecer ou validar uma sessão.
+   * O frontend chama este endpoint após obter um ID Token do Firebase.
+   * O JwtAuthGuard faz todo o trabalho pesado de validar o token e sincronizar o usuário.
+   * Se o Guard passar, o usuário está autenticado, e retornamos seus dados de sessão.
+   */
   @UseGuards(JwtAuthGuard)
+  @Get('session')
+  async getSession(@Request() req) {
+    // 'req.user' é anexado pelo JwtAuthGuard e contém o payload com o ID do nosso banco de dados.
+    const userId = req.user.userId;
+    return this.authService.getSessionUser(userId);
+  }
+
+  /**
+   * Endpoint para logout. O Guard garante que apenas um usuário autenticado pode chamar.
+   */
+  @UseGuards(JwtAuthGuard)
+  @Post('logout')
   async logout(@Request() req) {
-    const token = req.headers.authorization.split(' ')[1];
-    await this.authService.logout(token);
-    return { message: 'Logged out successfully' };
+    // Opcional: Se precisarmos do firebaseUid para revogar tokens
+    // const firebaseUid = req.user.firebaseUid; // O Guard precisaria anexar isso
+    await this.authService.logout(req.user.userId); // Passando nosso ID por enquanto
+    return { message: 'Sessão invalidada quando aplicável.' };
   }
 }

@@ -1,27 +1,33 @@
+// src/auth/auth.module.ts
+
 import { Module, forwardRef } from '@nestjs/common';
-import { AuthService } from './auth.service';
-import { JwtStrategy } from './jwt.strategy';
 import { PassportModule } from '@nestjs/passport';
-import { JwtModule } from '@nestjs/jwt';
-import { JwtAuthGuard } from './jwt-auth.guard';
 import { PrismaModule } from '../prisma/prisma.module';
-import { AuthController } from './auth.controller';
 import { UsersModule } from '../users/users.module';
 import { TenantModule } from '../tenant/tenant.module';
+import { AuthController } from './auth.controller';
+import { AuthService } from './auth.service';
+import { JwtAuthGuard } from './jwt-auth.guard';
+import { AUTH_PROVIDER } from '../infrastructure/auth/auth.provider.interface';
+import { FirebaseAuthProvider } from '../infrastructure/auth/firebase-auth.provider';
 
 @Module({
   imports: [
     PassportModule,
-    JwtModule.register({
-      secret: process.env.JWT_SECRET,
-      signOptions: { expiresIn: process.env.JWT_ACCESS_EXPIRATION },
-    }),
     PrismaModule,
-    forwardRef(() => UsersModule), // Correção: Use forwardRef aqui também
-    forwardRef(() => TenantModule), // Correção: Use forwardRef aqui também
+    forwardRef(() => UsersModule),
+    forwardRef(() => TenantModule),
   ],
-  providers: [AuthService, JwtStrategy, JwtAuthGuard],
   controllers: [AuthController],
-  exports: [AuthService, JwtAuthGuard],
+  providers: [
+    AuthService,
+    JwtAuthGuard,
+    FirebaseAuthProvider,
+    {
+      provide: AUTH_PROVIDER,
+      useClass: FirebaseAuthProvider,
+    },
+  ],
+  exports: [AuthService, JwtAuthGuard, AUTH_PROVIDER],
 })
 export class AuthModule {}

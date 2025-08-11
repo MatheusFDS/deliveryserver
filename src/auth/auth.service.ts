@@ -1,288 +1,56 @@
-import {
-  Injectable,
-  UnauthorizedException,
-  NotImplementedException,
-  InternalServerErrorException,
-  BadRequestException,
-  Logger,
-} from '@nestjs/common';
-import { JwtService } from '@nestjs/jwt';
+// src/auth/auth.service.ts
+
+import { Injectable, UnauthorizedException, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { LoginDto } from './dto/login.dto';
-import * as bcrypt from 'bcrypt';
+import { User } from '@prisma/client';
+import * as admin from 'firebase-admin';
 
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
 
-  constructor(
-    private readonly prisma: PrismaService,
-    private readonly jwtService: JwtService,
-  ) {}
+  constructor(private readonly prisma: PrismaService) {}
 
-  changePassword() {
-    throw new NotImplementedException();
-  }
-
-  resetPassword() {
-    throw new NotImplementedException();
-  }
-
-  forgotPassword() {
-    throw new NotImplementedException();
-  }
-
-  async validateUser(
-    email: string,
-    pass: string,
-    domain?: string,
-    isMobile: boolean = false,
-  ): Promise<any> {
-    try {
-      const user = await this.prisma.user.findUnique({
-        where: { email },
-        include: {
-          role: true,
-          driver: { select: { id: true } },
-          tenant: true,
-        },
-      });
-
-      if (
-        !user ||
-        !user.password ||
-        !(await bcrypt.compare(pass, user.password))
-      ) {
-        throw new UnauthorizedException('Credenciais inválidas.');
-      }
-
-      if (!user.isActive) {
-        throw new UnauthorizedException('Usuário inativo.');
-      }
-
-      const normalizedDomain = domain ? domain.split(':')[0] : undefined;
-
-      if (user.role.name.toLowerCase() === 'superadmin') {
-        if (
-          normalizedDomain === 'deliveryweb-production.up.railway.app' ||
-          normalizedDomain === 'localhost' ||
-          normalizedDomain === '127.0.0.1'
-        ) {
-          return this.removePassword(user);
-        } else {
-          throw new UnauthorizedException(
-            'Acesso restrito para superadmin fora do domínio específico.',
-          );
-        }
-      }
-
-      if (user.tenantId && (!user.tenant || !user.tenant.isActive)) {
-        throw new UnauthorizedException('Tenant inativo.');
-      }
-
-      const isLocalDev =
-        normalizedDomain === 'localhost' ||
-        normalizedDomain === '127.0.0.1' ||
-        domain === 'localhost:8081' ||
-        /^192\.168\.\d+\.\d+$/.test(normalizedDomain || '');
-
-      if (isLocalDev) {
-        return this.removePassword(user);
-      }
-
-      if (domain && user.tenant) {
-        let expectedDomain: string | null = null;
-
-        if (isMobile) {
-          expectedDomain = user.tenant.mobileDomain || user.tenant.domain;
-        } else {
-          expectedDomain = user.tenant.domain;
-        }
-
-        if (expectedDomain && expectedDomain !== normalizedDomain) {
-          throw new UnauthorizedException(
-            `Domínio inválido para ${isMobile ? 'mobile' : 'web'}. Esperado: ${expectedDomain}, Recebido: ${normalizedDomain}`,
-          );
-        }
-
-        if (!expectedDomain && user.tenant) {
-          throw new UnauthorizedException(
-            `Domínio não configurado para este tenant no acesso ${isMobile ? 'mobile' : 'web'}.`,
-          );
-        }
-      }
-
-      return this.removePassword(user);
-    } catch (e) {
-      if (
-        e instanceof UnauthorizedException ||
-        e instanceof BadRequestException
-      ) {
-        throw e;
-      }
-      this.logger.error('Erro ao validar usuário', e.stack || e);
-      throw new InternalServerErrorException('Erro ao validar usuário.');
-    }
-  }
-
-  async login(loginDto: LoginDto) {
-    const user = await this.validateUser(
-      loginDto.email,
-      loginDto.password,
-      loginDto.domain,
-      loginDto.isMobile || false,
-    );
-
-    if (user.role.name.toLowerCase() === 'driver' && !user.driver) {
-      throw new UnauthorizedException(
-        'Motorista não vinculado a um registro de driver.',
-      );
-    }
-
-    const payload: any = {
-      email: user.email,
-      sub: user.id,
-      role: user.role.name,
-    };
-
-    const accessToken = this.jwtService.sign(payload, {
-      secret: process.env.JWT_SECRET,
-      expiresIn: process.env.JWT_ACCESS_EXPIRATION,
+  /**
+   * Busca o usuário completo do banco de dados após a validação do token.
+   * Este método é o ponto de entrada para estabelecer a sessão do usuário no sistema.
+   * @param userId O ID interno do usuário (UUID), garantido como válido pelo Guard.
+   * @returns O objeto de usuário completo do nosso banco de dados.
+   */
+  async getSessionUser(userId: string): Promise<Omit<User, 'password'>> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      include: {
+        role: true,
+        tenant: true,
+        driver: { select: { id: true } },
+      },
     });
 
-    const refreshToken = this.jwtService.sign(
-      { sub: user.id },
-      {
-        secret: process.env.JWT_REFRESH_SECRET,
-        expiresIn: process.env.JWT_REFRESH_EXPIRATION,
-      },
-    );
-
-    const userResponse = {
-      id: user.id,
-      name: user.name,
-      email: user.email,
-      role: user.role.name,
-      tenantId: user.tenantId,
-      driverId: user.driver?.id || null,
-    };
-
-    return {
-      access_token: accessToken,
-      refresh_token: refreshToken,
-      user: userResponse,
-    };
-  }
-
-  async refreshToken(token: string) {
-    try {
-      if (await this.isTokenInvalid(token)) {
-        throw new UnauthorizedException('Token de atualização inválido.');
-      }
-
-      const refreshPayload = this.jwtService.verify(token, {
-        secret: process.env.JWT_REFRESH_SECRET,
-      });
-
-      const userWithDetails = await this.prisma.user.findUnique({
-        where: { id: refreshPayload.sub },
-        include: {
-          role: true,
-          driver: { select: { id: true } },
-          tenant: true,
-        },
-      });
-
-      if (!userWithDetails) {
-        throw new UnauthorizedException(
-          'Usuário do token de atualização não encontrado.',
-        );
-      }
-
-      if (!userWithDetails.isActive) {
-        throw new UnauthorizedException('Usuário inativo.');
-      }
-
-      if (
-        userWithDetails.tenantId &&
-        (!userWithDetails.tenant || !userWithDetails.tenant.isActive)
-      ) {
-        throw new UnauthorizedException('Tenant inativo.');
-      }
-
-      const newAccessTokenPayload: any = {
-        email: userWithDetails.email,
-        sub: userWithDetails.id,
-        role: userWithDetails.role.name,
-      };
-
-      const newAccessToken = this.jwtService.sign(newAccessTokenPayload, {
-        secret: process.env.JWT_SECRET,
-        expiresIn: process.env.JWT_ACCESS_EXPIRATION,
-      });
-
-      const newRefreshToken = this.jwtService.sign(
-        { sub: userWithDetails.id },
-        {
-          secret: process.env.JWT_REFRESH_SECRET,
-          expiresIn: process.env.JWT_REFRESH_EXPIRATION,
-        },
-      );
-
-      return {
-        access_token: newAccessToken,
-        refresh_token: newRefreshToken,
-      };
-    } catch (e) {
+    if (!user) {
       throw new UnauthorizedException(
-        'Token de atualização inválido ou expirado.',
+        'Usuário não encontrado no sistema após a validação.',
       );
     }
+
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { password, ...userWithoutPassword } = user;
+    return userWithoutPassword;
   }
 
-  async logout(token: string): Promise<void> {
+  /**
+   * Invalida todas as sessões de um usuário no Firebase.
+   * Uma medida de segurança que pode ser chamada pelo backend.
+   */
+  async logout(firebaseUid: string): Promise<void> {
     try {
-      const decoded = this.jwtService.decode(token) as any;
-      if (!decoded?.exp) return;
-
-      const expiresInSeconds = decoded.exp - Math.floor(Date.now() / 1000);
-      if (expiresInSeconds <= 0) return;
-
-      await this.prisma.invalidatedToken.create({
-        data: {
-          token,
-          expiresAt: new Date(decoded.exp * 1000),
-          invalidatedAt: new Date(),
-        },
-      });
-    } catch (e) {
-      this.logger.error('Erro ao processar logout', e.stack || e);
-      throw new InternalServerErrorException('Falha ao processar logout.');
+      await admin.auth().revokeRefreshTokens(firebaseUid);
+      this.logger.log(`Tokens de atualização revogados para: ${firebaseUid}`);
+    } catch (error) {
+      this.logger.error(
+        `Falha ao revogar tokens para o usuário ${firebaseUid}`,
+        error,
+      );
     }
-  }
-
-  async isTokenInvalid(token: string): Promise<boolean> {
-    try {
-      const invalidated = await this.prisma.invalidatedToken.findUnique({
-        where: { token },
-      });
-      return !!invalidated;
-    } catch {
-      return true;
-    }
-  }
-
-  async invalidateTokensForUser(): Promise<void> {
-    throw new NotImplementedException('Método não implementado.');
-  }
-
-  async invalidateTokensForTenant(): Promise<void> {
-    throw new NotImplementedException('Método não implementado.');
-  }
-
-  private removePassword(user: any) {
-    const userCopy = { ...user };
-    delete userCopy.password;
-    return userCopy;
   }
 }
