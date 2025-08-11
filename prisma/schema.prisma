@@ -9,9 +9,13 @@ generator client {
 
 // =================================================================
 // ENUMS NATIVOS
-// Justificativa: Garante a integridade dos dados no nível do banco,
-// prevenindo valores inválidos e inconsistentes para status e ações.
 // =================================================================
+
+enum FreightType {
+  DIRECTION_AND_CATEGORY
+  DIRECTION_AND_DELIVERY_FEE
+  DISTANCE_BASED
+}
 
 enum OrderStatus {
   SEM_ROTA
@@ -64,6 +68,7 @@ model User {
   driver         Driver?
   approvals      Approval[]
   orderHistories OrderHistory[]
+  notifications  Notification[] // Adicionada relação inversa
 }
 
 model Role {
@@ -73,8 +78,6 @@ model Role {
   isPlatformRole Boolean  @default(false)
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
-
-  // Relações
   users          User[]
 }
 
@@ -84,11 +87,14 @@ model Tenant {
   name                  String            @unique
   domain                String?           @unique
   mobileDomain          String?           @unique
-  minDeliveryPercentage Float?
   address               String?
+  minDeliveryPercentage Float?
   minValue              Float?
   minOrders             Int?
   minPeso               Float?
+  freightType           FreightType       @default(DIRECTION_AND_CATEGORY)
+  pricePerKm            Float?
+  pricePerDelivery      Float?
   createdAt             DateTime          @default(now())
   updatedAt             DateTime          @updatedAt
 
@@ -106,6 +112,7 @@ model Tenant {
   payments              Payment[]
   approvals             Approval[]
   optimizedRoutes       OptimizedRoute[]
+  notifications         Notification[] // Adicionada relação inversa
 }
 
 model UserSettings {
@@ -114,22 +121,18 @@ model UserSettings {
   settings  Json
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-
-  // Relações
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model Driver {
-  id        String   @id @default(uuid())
-  name      String
-  license   String
-  cpf       String
-  tenantId  String
-  userId    String?  @unique
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  // Relações
+  id              String            @id @default(uuid())
+  name            String
+  license         String
+  cpf             String
+  tenantId        String
+  userId          String?           @unique
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
   tenant          Tenant            @relation(fields: [tenantId], references: [id])
   user            User?             @relation(fields: [userId], references: [id], onDelete: SetNull)
   vehicles        Vehicle[]
@@ -154,8 +157,6 @@ model Vehicle {
   categoryId String
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
-
-  // Relações
   driver     Driver   @relation(fields: [driverId], references: [id])
   tenant     Tenant   @relation(fields: [tenantId], references: [id])
   category   Category @relation(fields: [categoryId], references: [id])
@@ -167,7 +168,7 @@ model Vehicle {
 }
 
 model Order {
-  id                     String    @id @default(uuid())
+  id                     String        @id @default(uuid())
   numero                 String
   data                   DateTime
   idCliente              String
@@ -187,7 +188,7 @@ model Order {
   nomeContato            String
   cpfCnpj                String
   cep                    String
-  status                 OrderStatus @default(SEM_ROTA) // Alterado para Enum
+  status                 OrderStatus   @default(SEM_ROTA)
   motivoNaoEntrega       String?
   codigoMotivoNaoEntrega String?
   deliveryId             String?
@@ -196,15 +197,13 @@ model Order {
   sorting                Int?
   startedAt              DateTime?
   completedAt            DateTime?
-  createdAt              DateTime  @default(now())
-  updatedAt              DateTime  @updatedAt
-
-  // Relações
-  tenant         Tenant         @relation(fields: [tenantId], references: [id])
-  delivery       Delivery?      @relation(fields: [deliveryId], references: [id], onDelete: SetNull)
-  driver         Driver?        @relation(fields: [driverId], references: [id])
-  deliveryProofs DeliveryProof[]
-  history        OrderHistory[]
+  createdAt              DateTime      @default(now())
+  updatedAt              DateTime      @updatedAt
+  tenant                 Tenant        @relation(fields: [tenantId], references: [id])
+  delivery               Delivery?     @relation(fields: [deliveryId], references: [id], onDelete: SetNull)
+  driver                 Driver?       @relation(fields: [driverId], references: [id])
+  deliveryProofs         DeliveryProof[]
+  history                OrderHistory[]
 
   @@unique([numero, tenantId])
   @@index([deliveryId])
@@ -220,8 +219,6 @@ model OrderHistory {
   userId      String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
-
-  // Relações
   order       Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
   user        User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
 
@@ -238,30 +235,26 @@ model Directions {
   tenantId     String
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
-
-  // Relações
   tenant       Tenant   @relation(fields: [tenantId], references: [id])
 
   @@index([tenantId])
 }
 
 model Delivery {
-  id            String         @id @default(uuid())
-  driverId      String         // Padronizado de 'motoristaId' para 'driverId'
-  vehicleId     String
-  valorFrete    Float
-  totalPeso     Float
-  totalValor    Float
-  dataInicio    DateTime       @default(now())
-  dataFim       DateTime?
-  status        DeliveryStatus // Alterado para Enum
-  tenantId      String
-  dataLiberacao DateTime?
-  observacao    String?
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
-
-  // Relações
+  id                String            @id @default(uuid())
+  driverId          String
+  vehicleId         String
+  valorFrete        Float
+  totalPeso         Float
+  totalValor        Float
+  dataInicio        DateTime          @default(now())
+  dataFim           DateTime?
+  status            DeliveryStatus
+  tenantId          String
+  dataLiberacao     DateTime?
+  observacao        String?
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
   tenant            Tenant            @relation(fields: [tenantId], references: [id])
   driver            Driver            @relation(fields: [driverId], references: [id])
   vehicle           Vehicle           @relation(fields: [vehicleId], references: [id])
@@ -277,30 +270,26 @@ model Approval {
   id         String         @id @default(uuid())
   deliveryId String
   tenantId   String
-  action     ApprovalAction // Alterado para Enum
+  action     ApprovalAction
   motivo     String?
   userId     String
   createdAt  DateTime       @default(now())
   updatedAt  DateTime       @updatedAt
-
-  // Relações
-  delivery   Delivery @relation(fields: [deliveryId], references: [id], onDelete: Cascade)
-  tenant     Tenant   @relation(fields: [tenantId], references: [id])
-  user       User     @relation(fields: [userId], references: [id])
+  delivery   Delivery       @relation(fields: [deliveryId], references: [id], onDelete: Cascade)
+  tenant     Tenant         @relation(fields: [tenantId], references: [id])
+  user       User           @relation(fields: [userId], references: [id])
 
   @@index([deliveryId])
   @@index([userId])
 }
 
 model Category {
-  id        String   @id @default(uuid())
+  id        String    @id @default(uuid())
   name      String
   valor     Float
   tenantId  String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  // Relações
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
   tenant    Tenant    @relation(fields: [tenantId], references: [id])
   vehicles  Vehicle[]
 
@@ -312,13 +301,11 @@ model AccountsPayable {
   amount            Float
   status            PaymentStatus     @default(PENDENTE)
   tenantId          String
-  driverId          String            // Padronizado de 'motoristaId' para 'driverId'
+  driverId          String
   createdAt         DateTime          @default(now())
   updatedAt         DateTime          @updatedAt
   isGroup           Boolean           @default(false)
   groupedPaymentId  String?
-
-  // Relações
   groupedPayment    AccountsPayable?  @relation("GroupedPayments", fields: [groupedPaymentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   groupedPayments   AccountsPayable[] @relation("GroupedPayments")
   tenant            Tenant            @relation(fields: [tenantId], references: [id])
@@ -332,8 +319,6 @@ model PaymentDelivery {
   tenantId   String
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
-
-  // Relações
   tenant          Tenant          @relation(fields: [tenantId], references: [id])
   accountsPayable AccountsPayable @relation(fields: [paymentId], references: [id], onDelete: Cascade)
   delivery        Delivery        @relation(fields: [deliveryId], references: [id], onDelete: Cascade)
@@ -348,8 +333,6 @@ model Payment {
   tenantId  String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-
-  // Relações
   driver    Driver   @relation(fields: [driverId], references: [id])
   tenant    Tenant   @relation(fields: [tenantId], references: [id])
 }
@@ -362,8 +345,6 @@ model DeliveryProof {
   proofUrl  String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-
-  // Relações
   order     Order    @relation(fields: [orderId], references: [id])
   driver    Driver   @relation(fields: [driverId], references: [id])
   tenant    Tenant   @relation(fields: [tenantId], references: [id])
@@ -375,16 +356,11 @@ model OptimizedRoute {
   startingPoint String
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
-
-  // --- MODELO REFATORADO PARA ABSTRAÇÃO ---
-  provider      String   // Ex: "Maps", "mapbox", "internal_calculator"
-  providerData  Json     // Armazena a resposta agnóstica do provedor.
-  
+  provider      String
+  providerData  Json
   totalDistance Float?
   totalTime     Int?
   mapUrl        String?
-
-  // Relações
   tenant        Tenant   @relation(fields: [tenantId], references: [id])
 
   @@index([tenantId])
@@ -401,4 +377,22 @@ model InvalidatedToken {
 
   @@index([token])
   @@index([expiresAt])
+}
+
+// NOVO MODELO: Adicionado para persistir notificações.
+model Notification {
+  id        String   @id @default(uuid())
+  tenantId  String
+  userId    String   // O ID do usuário que receberá a notificação
+  isRead    Boolean  @default(false)
+  message   String   // A mensagem a ser exibida
+  type      String   // Ex: 'DELIVERY_APPROVED', 'NEW_ROUTE_ASSIGNED'
+  linkTo    String?  // Ex: '/deliveries/uuid-da-entrega'
+  createdAt DateTime @default(now())
+
+  // Relações
+  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+  user      User     @relation(fields: [userId], references: [id])
+
+  @@index([userId, isRead])
 }

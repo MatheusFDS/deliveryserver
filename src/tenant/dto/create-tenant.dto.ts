@@ -1,3 +1,5 @@
+// src/tenant/dto/create-tenant.dto.ts
+
 import {
   IsString,
   IsNotEmpty,
@@ -6,7 +8,10 @@ import {
   IsBoolean,
   IsNumber,
   IsInt,
+  IsEnum,
+  IsPositive,
 } from 'class-validator';
+import { FreightType } from '@prisma/client';
 
 export class CreateTenantDto {
   @IsString({ message: 'O nome do tenant deve ser uma string.' })
@@ -25,22 +30,12 @@ export class CreateTenantDto {
 
   @IsOptional()
   @IsString({ message: 'O domínio do tenant deve ser uma string.' })
-  @IsNotEmpty({
-    message: 'O domínio do tenant não pode estar vazio se fornecido.',
-  })
-  @MaxLength(255, {
-    message: 'O domínio do tenant não pode ter mais de 255 caracteres.',
-  })
+  @MaxLength(255)
   readonly domain?: string;
 
   @IsOptional()
   @IsString({ message: 'O domínio mobile do tenant deve ser uma string.' })
-  @IsNotEmpty({
-    message: 'O domínio mobile do tenant não pode estar vazio se fornecido.',
-  })
-  @MaxLength(255, {
-    message: 'O domínio mobile do tenant não pode ter mais de 255 caracteres.',
-  })
+  @MaxLength(255)
   readonly mobileDomain?: string;
 
   @IsOptional()
@@ -65,4 +60,23 @@ export class CreateTenantDto {
   @IsOptional()
   @IsNumber({}, { message: 'O peso mínimo deve ser numérico.' })
   minPeso?: number;
+
+  // --- NOVOS CAMPOS ADICIONADOS ---
+
+  @IsOptional()
+  @IsEnum(FreightType, {
+    message:
+      'O tipo de frete deve ser um dos valores válidos: DIRECTION_AND_CATEGORY, DIRECTION_AND_DELIVERY_FEE, DISTANCE_BASED.',
+  })
+  freightType?: FreightType;
+
+  @IsOptional()
+  @IsNumber({}, { message: 'O valor por km deve ser um número.' })
+  @IsPositive({ message: 'O valor por km deve ser um número positivo.' })
+  pricePerKm?: number;
+
+  @IsOptional()
+  @IsNumber({}, { message: 'O valor por entrega deve ser um número.' })
+  @IsPositive({ message: 'O valor por entrega deve ser um número positivo.' })
+  pricePerDelivery?: number;
 }

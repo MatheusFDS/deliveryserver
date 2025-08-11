@@ -13,6 +13,7 @@ import { TenantModule } from '../tenant/tenant.module';
 import { RoutesController } from './routes.controller';
 import { RoutesService } from './routes.service';
 import { routesProviders } from './providers/routes.providers';
+import { MAPS_ADAPTER } from './interfaces/route-optimization.interface';
 
 @Module({
   imports: [
@@ -23,6 +24,6 @@ import { routesProviders } from './providers/routes.providers';
   ],
   controllers: [RoutesController],
   providers: [RoutesService, PrismaService, ...routesProviders],
-  exports: [RoutesService],
+  exports: [RoutesService, MAPS_ADAPTER],
 })
 export class RoutesModule {}

@@ -2,6 +2,7 @@
 
 import { Global, Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { NotificationsModule } from '../notifications/notifications.module'; // 1. Importar
 
 import { CACHE_SERVICE } from './cache/cache.interface';
 import { MemoryCacheService } from './cache/memory-cache.service';
@@ -13,14 +14,18 @@ import { RETRY_SERVICE } from './resilience/retry.interface';
 import { RetryService } from './resilience/retry.service';
 
 import { NOTIFICATION_PROVIDER } from './notifications/notification.interface';
-import { ConsoleNotificationProvider } from './notifications/console-notification.provider';
+import { RealtimeNotificationProvider } from './notifications/realtime-notification.provider';
+import { NotificationGateway } from './notifications/notification.gateway';
 
 import { AUDIT_PROVIDER } from './audit/audit.interface';
 import { ConsoleAuditProvider } from './audit/console-audit.provider';
 
 @Global()
 @Module({
-  imports: [ConfigModule],
+  imports: [
+    ConfigModule,
+    NotificationsModule, // 2. Adicionar aqui
+  ],
   providers: [
     {
       provide: CACHE_SERVICE,
@@ -36,12 +41,13 @@ import { ConsoleAuditProvider } from './audit/console-audit.provider';
     },
     {
       provide: NOTIFICATION_PROVIDER,
-      useClass: ConsoleNotificationProvider,
+      useClass: RealtimeNotificationProvider,
     },
     {
       provide: AUDIT_PROVIDER,
       useClass: ConsoleAuditProvider,
     },
+    NotificationGateway,
   ],
   exports: [
     CACHE_SERVICE,

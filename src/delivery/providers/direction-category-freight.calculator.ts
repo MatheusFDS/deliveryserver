@@ -1,4 +1,4 @@
-// src/delivery/providers/prisma-freight.calculator.ts
+// src/delivery/providers/direction-category-freight.calculator.ts
 
 import { Injectable, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -8,7 +8,9 @@ import {
 } from './freight-calculator.interface';
 
 @Injectable()
-export class PrismaFreightCalculator implements IFreightCalculator {
+export class DirectionAndCategoryFreightCalculator
+  implements IFreightCalculator
+{
   constructor(private readonly prisma: PrismaService) {}
 
   async calculate(context: FreightCalculationContext): Promise<number> {
