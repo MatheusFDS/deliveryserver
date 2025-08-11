@@ -1,5 +1,3 @@
-// src/infrastructure/notifications/notification.gateway.ts
-
 import { Logger } from '@nestjs/common';
 import {
   OnGatewayConnection,
@@ -12,12 +10,11 @@ import { Server, Socket } from 'socket.io';
 import * as jwt from 'jsonwebtoken';
 
 @WebSocketGateway({
-  // Remove o cors daqui para usar a configuração do CustomIoAdapter
   namespace: '/',
-  pingInterval: 25000, // 25s
-  pingTimeout: 50000, // 50s
-  maxHttpBufferSize: 1e6, // 1MB
-  allowEIO3: true, // Compatibilidade com versões anteriores
+  pingInterval: 25000,
+  pingTimeout: 50000,
+  maxHttpBufferSize: 1e6,
+  allowEIO3: true,
 })
 export class NotificationGateway
   implements OnGatewayConnection, OnGatewayDisconnect
@@ -26,8 +23,6 @@ export class NotificationGateway
   server: Server;
 
   private readonly logger = new Logger(NotificationGateway.name);
-
-  // userId -> Set de socketIds
   private connectedUsers = new Map<string, Set<string>>();
 
   async handleConnection(client: Socket) {
@@ -46,7 +41,6 @@ export class NotificationGateway
         return;
       }
 
-      // Valida token
       let decoded: any;
       try {
         decoded = jwt.verify(token, process.env.JWT_SECRET || 'sua_chave_aqui');
@@ -66,19 +60,16 @@ export class NotificationGateway
         return;
       }
 
-      // Registra conexão
       if (!this.connectedUsers.has(userId)) {
         this.connectedUsers.set(userId, new Set());
       }
       this.connectedUsers.get(userId)!.add(client.id);
 
-      // Salva dados no socket
       client.data.userId = userId;
       client.data.connectedAt = new Date();
 
       this.logger.log(`Cliente conectado: ${client.id} (usuário ${userId})`);
 
-      // Confirma conexão bem-sucedida
       client.emit('connected', {
         message: 'Conectado com sucesso',
         userId,
@@ -117,7 +108,6 @@ export class NotificationGateway
 
   @SubscribeMessage('register')
   handleRegister(client: Socket, userId: string): void {
-    // Valida se o userId bate com o do token
     if (client.data.userId === userId) {
       this.logger.log(
         `Usuário ${userId} confirmou registro no socket ${client.id}`,
@@ -142,37 +132,80 @@ export class NotificationGateway
   }
 
   sendToUser(userId: string, event: string, data: any): void {
-    const socketIds = this.connectedUsers.get(userId);
-    if (socketIds && socketIds.size > 0) {
+    try {
+      if (!userId) {
+        this.logger.warn('UserId é obrigatório para envio de notificação');
+        return;
+      }
+
+      if (!this.connectedUsers) {
+        this.logger.error('Map de usuários conectados não foi inicializado');
+        return;
+      }
+
+      const socketIds = this.connectedUsers.get(userId);
+
+      if (!socketIds || socketIds.size === 0) {
+        this.logger.warn(
+          `Usuário ${userId} não está conectado para receber evento '${event}'`,
+        );
+        return;
+      }
+
       this.logger.log(
         `Enviando evento '${event}' para usuário ${userId} (${socketIds.size} conexões)`,
       );
+
+      const socketsToRemove: string[] = [];
+
       socketIds.forEach((socketId) => {
-        const socket = this.server.sockets.sockets.get(socketId);
-        if (socket && socket.connected) {
+        try {
+          if (!this.server?.sockets?.sockets) {
+            this.logger.error('Server sockets não está disponível');
+            return;
+          }
+
+          const socket = this.server.sockets.sockets.get(socketId);
+
+          if (!socket) {
+            socketsToRemove.push(socketId);
+            return;
+          }
+
+          if (!socket.connected) {
+            socketsToRemove.push(socketId);
+            return;
+          }
+
           socket.emit(event, {
             ...data,
             timestamp: Date.now(),
             eventType: event,
           });
-        } else {
-          // Remove socket desconectado
-          socketIds.delete(socketId);
+        } catch (socketError) {
+          this.logger.error(
+            `Erro ao enviar para socket ${socketId}:`,
+            socketError,
+          );
+          socketsToRemove.push(socketId);
         }
       });
 
-      // Limpa usuário se não há mais sockets
+      socketsToRemove.forEach((socketId) => {
+        socketIds.delete(socketId);
+      });
+
       if (socketIds.size === 0) {
         this.connectedUsers.delete(userId);
       }
-    } else {
-      this.logger.warn(
-        `Não foi possível enviar evento '${event}'. Usuário ${userId} não está conectado.`,
+    } catch (error) {
+      this.logger.error(
+        `Erro geral no sendToUser para usuário ${userId}:`,
+        error,
       );
     }
   }
 
-  // Método para obter estatísticas de conexão
   getConnectionStats(): {
     totalUsers: number;
     totalConnections: number;

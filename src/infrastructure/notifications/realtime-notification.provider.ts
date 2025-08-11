@@ -1,5 +1,3 @@
-// src/infrastructure/notifications/realtime-notification.provider.ts
-
 import { Injectable, Logger } from '@nestjs/common';
 import {
   INotificationProvider,
@@ -20,14 +18,13 @@ export class RealtimeNotificationProvider implements INotificationProvider {
   async send(payload: NotificationPayload): Promise<void> {
     const { recipient, channels, templateId, data } = payload;
 
-    // Passo 1: Salvar a notificação no banco de dados (se for para um usuário)
     if (recipient.userId && data.tenantId) {
       try {
         await this.notificationsService.create({
           userId: recipient.userId,
           tenantId: data.tenantId,
           type: templateId,
-          message: this.generateMessage(templateId, data), // Gera uma mensagem legível
+          message: this.generateMessage(templateId, data),
           linkTo: data.linkTo || null,
         });
       } catch (error) {
@@ -35,14 +32,12 @@ export class RealtimeNotificationProvider implements INotificationProvider {
           'Falha ao salvar a notificação no banco de dados.',
           error,
         );
-        // Continua para tentar enviar em tempo real mesmo assim
       }
     }
 
-    // Passo 2: Enviar a notificação em tempo real pelos canais solicitados
     for (const channel of channels) {
       switch (channel) {
-        case 'push': // Web Sockets servem para "push" em apps abertos
+        case 'push':
           if (recipient.userId) {
             this.notificationGateway.sendToUser(
               recipient.userId,
@@ -51,34 +46,79 @@ export class RealtimeNotificationProvider implements INotificationProvider {
             );
           }
           break;
-
         case 'sms':
-          // Lógica futura para envio de SMS aqui
           this.logger.log(`[SIMULAÇÃO] Enviando SMS para ${recipient.phone}`);
           break;
-
         case 'email':
-          // Lógica futura para envio de Email aqui
           this.logger.log(`[SIMULAÇÃO] Enviando Email para ${recipient.email}`);
           break;
-
         default:
           this.logger.warn(`Canal de notificação '${channel}' não suportado.`);
       }
     }
   }
 
-  // Helper para criar mensagens amigáveis baseadas no template
   private generateMessage(templateId: string, data: any): string {
+    const deliveryShortId = data.deliveryId?.slice(0, 8) || 'N/A';
+    const orderShortId = data.orderId?.slice(0, 8) || 'N/A';
+    const orderNumber = data.orderNumber || orderShortId;
+
     switch (templateId) {
       case 'delivery-approved-for-driver':
-        return `O roteiro ${data.deliveryId.slice(0, 8)}... foi aprovado e liberado.`;
+        return `Roteiro ${deliveryShortId}... foi aprovado e liberado para entrega`;
+
       case 'delivery-needs-approval':
-        return `O roteiro ${data.deliveryId.slice(0, 8)}... requer sua aprovação.`;
+        return `Roteiro ${deliveryShortId}... aguarda sua aprovação`;
+
+      case 'delivery-needs-reapproval':
+        return `Roteiro ${deliveryShortId}... precisa de nova aprovação após alterações`;
+
+      case 'delivery-needs-reapproval-order-removed':
+        return `Roteiro ${deliveryShortId}... precisa de nova aprovação - pedido ${orderNumber} removido`;
+
       case 'delivery-completed':
-        return `O roteiro ${data.deliveryId.slice(0, 8)}... foi finalizado.`;
+        return `Roteiro ${deliveryShortId}... foi finalizado com sucesso`;
+
+      case 'delivery-rejected':
+        return `Roteiro ${deliveryShortId}... foi rejeitado - ${data.reason || 'sem motivo informado'}`;
+
+      case 'order-status-changed':
+        return this.getOrderStatusMessage(
+          data.newStatus,
+          orderNumber,
+          data.customerName,
+        );
+
       default:
-        return 'Você tem uma nova notificação.';
+        return 'Você tem uma nova notificação';
+    }
+  }
+
+  private getOrderStatusMessage(
+    newStatus: string,
+    orderNumber: string,
+    customerName: string,
+  ): string {
+    const customer = customerName || 'Cliente';
+
+    switch (newStatus) {
+      case 'EM_ENTREGA':
+        return `Entrega ${orderNumber} iniciada para ${customer}`;
+
+      case 'ENTREGUE':
+        return `Entrega ${orderNumber} finalizada com sucesso para ${customer}`;
+
+      case 'NAO_ENTREGUE':
+        return `Entrega ${orderNumber} não realizada para ${customer}`;
+
+      case 'EM_ROTA':
+        return `Pedido ${orderNumber} saiu para entrega - ${customer}`;
+
+      case 'EM_ROTA_AGUARDANDO_LIBERACAO':
+        return `Pedido ${orderNumber} aguarda liberação - ${customer}`;
+
+      default:
+        return `Status do pedido ${orderNumber} alterado para ${newStatus} - ${customer}`;
     }
   }
 }

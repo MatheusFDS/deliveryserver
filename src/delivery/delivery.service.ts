@@ -107,6 +107,25 @@ export class DeliveryService {
     return validTransitions[currentStatus]?.includes(newStatus) || false;
   }
 
+  private async sendNotificationsAsync(
+    notifications: Array<() => Promise<void>>,
+  ): Promise<void> {
+    setImmediate(async () => {
+      try {
+        const notificationPromises = notifications.map(async (notifyFn) => {
+          try {
+            await notifyFn();
+          } catch (error) {
+            this.logger.error('Erro ao enviar notificação individual:', error);
+          }
+        });
+        await Promise.allSettled(notificationPromises);
+      } catch (error) {
+        this.logger.error('Erro geral ao enviar notificações:', error);
+      }
+    });
+  }
+
   async create(createDeliveryDto: CreateDeliveryDto, userId: string) {
     const tenantId = await this.getTenantIdFromUserId(userId);
     const {
@@ -205,19 +224,21 @@ export class DeliveryService {
 
     if (validationResult.needsApproval) {
       const adminUsers = await this.getAdminUsers(tenantId);
-      for (const adminUserId of adminUsers) {
-        await this.notificationProvider.send({
-          recipient: { userId: adminUserId },
-          channels: ['push', 'email'],
-          templateId: 'delivery-needs-approval',
-          data: {
-            deliveryId: delivery.id,
-            reasons: validationResult.reasons,
-            tenantId,
-            linkTo: `/entregas/${delivery.id}`,
-          },
-        });
-      }
+      const notifications = adminUsers.map(
+        (adminUserId) => () =>
+          this.notificationProvider.send({
+            recipient: { userId: adminUserId },
+            channels: ['push', 'email'],
+            templateId: 'delivery-needs-approval',
+            data: {
+              deliveryId: delivery.id,
+              reasons: validationResult.reasons,
+              tenantId,
+              linkTo: `/entregas/${delivery.id}`,
+            },
+          }),
+      );
+      await this.sendNotificationsAsync(notifications);
     }
 
     return {
@@ -368,17 +389,21 @@ export class DeliveryService {
     });
 
     if (delivery.driver.userId) {
-      await this.notificationProvider.send({
-        recipient: { userId: delivery.driver.userId },
-        channels: ['push', 'sms'],
-        templateId: 'delivery-approved-for-driver',
-        data: {
-          deliveryId,
-          driverName: delivery.driver.name,
-          tenantId,
-          linkTo: `/(tabs)`,
-        },
-      });
+      const notifications = [
+        () =>
+          this.notificationProvider.send({
+            recipient: { userId: delivery.driver.userId },
+            channels: ['push', 'sms'],
+            templateId: 'delivery-approved-for-driver',
+            data: {
+              deliveryId,
+              driverName: delivery.driver.name,
+              tenantId,
+              linkTo: `/(tabs)`,
+            },
+          }),
+      ];
+      await this.sendNotificationsAsync(notifications);
     }
 
     return {
@@ -428,18 +453,22 @@ export class DeliveryService {
     });
 
     if (delivery.driver.userId) {
-      await this.notificationProvider.send({
-        recipient: { userId: delivery.driver.userId },
-        channels: ['push', 'email'],
-        templateId: 'delivery-rejected',
-        data: {
-          deliveryId,
-          reason: motivo,
-          driverName: delivery.driver.name,
-          tenantId,
-          linkTo: `/(tabs)`,
-        },
-      });
+      const notifications = [
+        () =>
+          this.notificationProvider.send({
+            recipient: { userId: delivery.driver.userId },
+            channels: ['push', 'email'],
+            templateId: 'delivery-rejected',
+            data: {
+              deliveryId,
+              reason: motivo,
+              driverName: delivery.driver.name,
+              tenantId,
+              linkTo: `/(tabs)`,
+            },
+          }),
+      ];
+      await this.sendNotificationsAsync(notifications);
     }
 
     return {
@@ -510,27 +539,15 @@ export class DeliveryService {
       },
     });
 
-    // Atualizar status do delivery se necessário
+    let deliveryCompleted = false;
     if (remainingOrders === 0) {
       await this.prisma.delivery.update({
         where: { id: order.deliveryId! },
         data: { status: DeliveryStatus.FINALIZADO, dataFim: new Date() },
       });
-
-      // Enviar notificação de delivery finalizado de forma assíncrona
-      this.sendDeliveryCompletedNotifications(
-        order.deliveryId!,
-        order.delivery.driver.name,
-        driver.tenantId,
-      ).catch((error) => {
-        this.logger.error(
-          'Erro ao enviar notificações de delivery finalizado:',
-          error,
-        );
-      });
+      deliveryCompleted = true;
     }
 
-    // Registrar auditoria
     await this.auditProvider.logAction({
       userId,
       tenantId: driver.tenantId,
@@ -540,122 +557,55 @@ export class DeliveryService {
       timestamp: new Date(),
     });
 
-    // Enviar notificação de mudança de status de forma assíncrona
-    this.sendOrderStatusChangeNotifications({
-      orderId,
-      newStatus,
-      oldStatus: order.status,
-      deliveryId: order.deliveryId!,
-      customerName: order.cliente,
-      driverName: order.delivery.driver.name,
-      tenantId: driver.tenantId,
-      adminUsers: await this.getAdminUsers(driver.tenantId),
-    }).catch((error) => {
-      this.logger.error(
-        'Erro ao enviar notificações de mudança de status:',
-        error,
+    const adminUsers = await this.getAdminUsers(driver.tenantId);
+    const notifications = [];
+
+    if (deliveryCompleted) {
+      notifications.push(
+        ...adminUsers.map(
+          (adminUserId) => () =>
+            this.notificationProvider.send({
+              recipient: { userId: adminUserId },
+              channels: ['push', 'email'],
+              templateId: 'delivery-completed',
+              data: {
+                deliveryId: order.deliveryId,
+                driverName: order.delivery.driver.name,
+                tenantId: driver.tenantId,
+                linkTo: `/entregas/${order.deliveryId}`,
+              },
+            }),
+        ),
       );
-    });
+    }
+
+    notifications.push(
+      ...adminUsers.map(
+        (adminUserId) => () =>
+          this.notificationProvider.send({
+            recipient: { userId: adminUserId },
+            channels: ['push', 'email'],
+            templateId: 'order-status-changed',
+            data: {
+              orderId,
+              newStatus,
+              oldStatus: order.status,
+              deliveryId: order.deliveryId,
+              customerName: order.cliente,
+              driverName: order.delivery.driver.name,
+              tenantId: driver.tenantId,
+              linkTo: `/entregas/${order.deliveryId}`,
+              orderNumber: order.numero,
+            },
+          }),
+      ),
+    );
+
+    await this.sendNotificationsAsync(notifications);
 
     return updatedOrder;
   }
 
-  // Método privado para enviar notificações de delivery finalizado
-  private async sendDeliveryCompletedNotifications(
-    deliveryId: string,
-    driverName: string,
-    tenantId: string,
-  ): Promise<void> {
-    try {
-      const adminUsers = await this.getAdminUsers(tenantId);
-
-      // Enviar notificações em paralelo, mas capturar erros individualmente
-      const notificationPromises = adminUsers.map(async (adminUserId) => {
-        try {
-          await this.notificationProvider.send({
-            recipient: { userId: adminUserId },
-            channels: ['push', 'email'],
-            templateId: 'delivery-completed',
-            data: {
-              deliveryId,
-              driverName,
-              tenantId,
-              linkTo: `/entregas/${deliveryId}`,
-            },
-          });
-          this.logger.log(
-            `Notificação de delivery finalizado enviada para usuário ${adminUserId}`,
-          );
-        } catch (error) {
-          this.logger.error(
-            `Erro ao enviar notificação de delivery finalizado para usuário ${adminUserId}:`,
-            error,
-          );
-        }
-      });
-
-      await Promise.allSettled(notificationPromises);
-    } catch (error) {
-      this.logger.error(
-        'Erro geral ao enviar notificações de delivery finalizado:',
-        error,
-      );
-      throw error;
-    }
-  }
-
-  // Método privado para enviar notificações de mudança de status
-  private async sendOrderStatusChangeNotifications(params: {
-    orderId: string;
-    newStatus: OrderStatus;
-    oldStatus: OrderStatus;
-    deliveryId: string;
-    customerName: string;
-    driverName: string;
-    tenantId: string;
-    adminUsers: string[];
-  }): Promise<void> {
-    try {
-      // Enviar notificações em paralelo, mas capturar erros individualmente
-      const notificationPromises = params.adminUsers.map(
-        async (adminUserId) => {
-          try {
-            await this.notificationProvider.send({
-              recipient: { userId: adminUserId },
-              channels: ['push', 'email'],
-              templateId: 'order-status-changed',
-              data: {
-                orderId: params.orderId,
-                newStatus: params.newStatus,
-                oldStatus: params.oldStatus,
-                deliveryId: params.deliveryId,
-                customerName: params.customerName,
-                driverName: params.driverName,
-                tenantId: params.tenantId,
-                linkTo: `/entregas/${params.deliveryId}`,
-              },
-            });
-            this.logger.log(
-              `Notificação de mudança de status enviada para usuário ${adminUserId}`,
-            );
-          } catch (error) {
-            this.logger.error(
-              `Erro ao enviar notificação de mudança de status para usuário ${adminUserId}:`,
-              error,
-            );
-          }
-        },
-      );
-
-      await Promise.allSettled(notificationPromises);
-    } catch (error) {
-      this.logger.error(
-        'Erro geral ao enviar notificações de mudança de status:',
-        error,
-      );
-      throw error;
-    }
-  }
   async update(
     id: string,
     updateDeliveryDto: UpdateDeliveryDto,
@@ -779,19 +729,21 @@ export class DeliveryService {
       });
 
       const adminUsers = await this.getAdminUsers(tenantId);
-      for (const adminUserId of adminUsers) {
-        await this.notificationProvider.send({
-          recipient: { userId: adminUserId },
-          channels: ['push', 'email'],
-          templateId: 'delivery-needs-reapproval',
-          data: {
-            deliveryId: id,
-            reasons: validationResult.reasons,
-            tenantId,
-            linkTo: `/entregas/${id}`,
-          },
-        });
-      }
+      const notifications = adminUsers.map(
+        (adminUserId) => () =>
+          this.notificationProvider.send({
+            recipient: { userId: adminUserId },
+            channels: ['push', 'email'],
+            templateId: 'delivery-needs-reapproval',
+            data: {
+              deliveryId: id,
+              reasons: validationResult.reasons,
+              tenantId,
+              linkTo: `/entregas/${id}`,
+            },
+          }),
+      );
+      await this.sendNotificationsAsync(notifications);
     }
 
     const updatedDelivery = await this.prisma.delivery.update({
@@ -910,19 +862,22 @@ export class DeliveryService {
       });
 
       const adminUsers = await this.getAdminUsers(tenantId);
-      for (const adminUserId of adminUsers) {
-        await this.notificationProvider.send({
-          recipient: { userId: adminUserId },
-          channels: ['push', 'email'],
-          templateId: 'delivery-needs-reapproval-order-removed',
-          data: {
-            deliveryId,
-            orderId,
-            tenantId,
-            linkTo: `/entregas/${deliveryId}`,
-          },
-        });
-      }
+      const notifications = adminUsers.map(
+        (adminUserId) => () =>
+          this.notificationProvider.send({
+            recipient: { userId: adminUserId },
+            channels: ['push', 'email'],
+            templateId: 'delivery-needs-reapproval-order-removed',
+            data: {
+              deliveryId,
+              orderId,
+              tenantId,
+              linkTo: `/entregas/${deliveryId}`,
+              orderNumber: order.numero,
+            },
+          }),
+      );
+      await this.sendNotificationsAsync(notifications);
     }
 
     await this.prisma.delivery.update({
