@@ -3,7 +3,7 @@ import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
 import { CorsOptions } from '@nestjs/common/interfaces/external/cors-options.interface';
 import { AppExceptionFilter } from './common/filters/app-exception.filter';
-
+import { IoAdapter } from '@nestjs/platform-socket.io';
 const port = process.env.PORT || 4000;
 
 async function bootstrap() {
@@ -18,9 +18,7 @@ async function bootstrap() {
 
   const corsOptions: CorsOptions = {
     origin: (origin, callback) => {
-      if (!origin) return callback(null, true);
-
-      if (allowedOrigins.includes(origin)) {
+      if (!origin || allowedOrigins.includes(origin)) {
         callback(null, true);
       } else {
         callback(new Error('Origin não autorizada pelo CORS'));
@@ -32,6 +30,8 @@ async function bootstrap() {
   };
 
   app.enableCors(corsOptions);
+
+  app.useWebSocketAdapter(new IoAdapter(app));
 
   app.useGlobalPipes(
     new ValidationPipe({
