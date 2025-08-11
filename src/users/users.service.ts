@@ -10,8 +10,10 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
+import { InviteUserDto } from './dto/invite-user.dto';
 import * as bcrypt from 'bcrypt';
-import { Prisma } from '@prisma/client';
+import { Prisma, InviteStatus } from '@prisma/client';
+import { addDays } from 'date-fns';
 
 @Injectable()
 export class UsersService {
@@ -53,77 +55,70 @@ export class UsersService {
   // OPERAÇÕES DE USUÁRIO - NÍVEL DE TENANT (Admin do Tenant)
   // ==============================================================
 
-  async createUserForTenant(
-    createUserDto: CreateUserDto,
+  async inviteUserForTenant(
+    inviteUserDto: InviteUserDto,
     requestingUserId: string,
   ) {
     const requestingUser =
       await this.getRequestingUserWithRoleAndTenant(requestingUserId);
-    const requestingUserTenantId = requestingUser.tenantId;
+    const tenantId = requestingUser.tenantId;
 
-    if (!requestingUserTenantId) {
+    if (!tenantId) {
       throw new ForbiddenException(
-        'Administrador não associado a um tenant para criar usuário.',
+        'Administrador não associado a um tenant para convidar usuários.',
       );
     }
 
-    const { password, roleId, ...data } = createUserDto;
+    const { email, roleId } = inviteUserDto;
+
+    const existingUser = await this.prisma.user.findFirst({
+      where: { email, tenantId },
+    });
+    if (existingUser) {
+      throw new ConflictException(
+        'Um usuário com este e-mail já existe nesta empresa.',
+      );
+    }
+
+    const existingInvite = await this.prisma.userInvite.findFirst({
+      where: { email, tenantId, status: InviteStatus.PENDING },
+    });
+    if (existingInvite) {
+      throw new ConflictException(
+        'Já existe um convite pendente para este e-mail nesta empresa.',
+      );
+    }
 
     const targetRole = await this.prisma.role.findUnique({
       where: { id: roleId },
     });
-    if (!targetRole) {
-      throw new BadRequestException('Perfil especificado não existe.');
-    }
-    if (targetRole.isPlatformRole) {
-      throw new ForbiddenException(
-        'Você não pode criar usuários com perfis de plataforma.',
+    if (!targetRole || targetRole.isPlatformRole) {
+      throw new BadRequestException(
+        'Perfil inválido ou não permitido para tenants.',
       );
     }
-
-    const existingUserByEmail = await this.prisma.user.findFirst({
-      where: { email: data.email, tenantId: requestingUserTenantId },
-    });
-    if (existingUserByEmail) {
-      throw new ConflictException(
-        'Já existe um usuário com este email na sua empresa.',
-      );
-    }
-
-    const existingUserByName = await this.prisma.user.findFirst({
-      where: {
-        name: { equals: data.name, mode: 'insensitive' },
-        tenantId: requestingUserTenantId,
-      },
-    });
-    if (existingUserByName) {
-      throw new ConflictException(
-        `Já existe um usuário com o nome "${data.name}" na sua empresa.`,
-      );
-    }
-
-    const hashedPassword = await bcrypt.hash(password, 10);
 
     try {
-      return this.prisma.user.create({
+      const invite = await this.prisma.userInvite.create({
         data: {
-          ...data,
-          password: hashedPassword,
-          tenantId: requestingUserTenantId,
-          roleId: roleId,
-          isActive: true,
-        },
-        select: {
-          id: true,
-          email: true,
-          name: true,
-          role: { select: { name: true } },
-          isActive: true,
+          email,
+          roleId,
+          tenantId,
+          invitedBy: requestingUserId,
+          status: InviteStatus.PENDING,
+          expiresAt: addDays(new Date(), 7), // Convite expira em 7 dias
         },
       });
+
+      // TODO: Integrar serviço de e-mail para enviar o convite.
+
+      return {
+        message: 'Convite enviado com sucesso!',
+        invite,
+      };
     } catch (error) {
       throw new InternalServerErrorException(
-        'Erro inesperado ao criar o usuário.',
+        'Erro inesperado ao criar o convite.',
       );
     }
   }

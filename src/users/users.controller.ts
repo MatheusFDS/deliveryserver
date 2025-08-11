@@ -13,7 +13,7 @@ import {
   ParseIntPipe,
 } from '@nestjs/common';
 import { UsersService } from './users.service';
-import { CreateUserDto } from './dto/create-user.dto';
+import { InviteUserDto } from './dto/invite-user.dto'; // 1. Mudar o DTO
 import { UpdateUserDto } from './dto/update-user.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
@@ -31,12 +31,13 @@ export class UsersController {
     return this.usersService.findOneById(userId);
   }
 
+  // 2. O endpoint de criação agora é para convidar
   @Post()
   @Roles('admin')
-  async create(@Body() createUserDto: CreateUserDto, @Req() req: Request) {
+  async invite(@Body() inviteUserDto: InviteUserDto, @Req() req: Request) {
     const requestingUserId = (req.user as any).userId;
-    return this.usersService.createUserForTenant(
-      createUserDto,
+    return this.usersService.inviteUserForTenant(
+      inviteUserDto,
       requestingUserId,
     );
   }
@@ -92,7 +93,6 @@ export class UsersController {
   @Roles('admin')
   async remove(@Param('id') id: string, @Req() req: Request) {
     const requestingUserId = (req.user as any).userId;
-    // O método de serviço para inativar já foi renomeado e ajustado, mantemos a chamada.
     return this.usersService.updateUserForTenant(
       id,
       { isActive: false },

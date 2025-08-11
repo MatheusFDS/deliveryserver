@@ -5,11 +5,12 @@ import {
   UnauthorizedException,
   OnModuleInit,
   InternalServerErrorException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../prisma/prisma.service';
 import { IAuthProvider, DecodedToken } from './auth.provider.interface';
-import { User as PrismaUser } from '@prisma/client';
+import { User as PrismaUser, InviteStatus } from '@prisma/client';
 import * as admin from 'firebase-admin';
 
 @Injectable()
@@ -57,6 +58,7 @@ export class FirebaseAuthProvider implements IAuthProvider, OnModuleInit {
   }
 
   async findOrCreateUser(decodedToken: DecodedToken): Promise<PrismaUser> {
+    // 1. Verifica se o usuário já existe pelo firebaseUid
     const existingUser = await this.prisma.user.findUnique({
       where: { firebaseUid: decodedToken.uid },
     });
@@ -65,34 +67,49 @@ export class FirebaseAuthProvider implements IAuthProvider, OnModuleInit {
       return existingUser;
     }
 
-    const userByEmail = await this.prisma.user.findUnique({
-      where: { email: decodedToken.email },
+    // 2. Se não existe, verifica se há um convite PENDENTE para o e-mail do token
+    const invite = await this.prisma.userInvite.findFirst({
+      where: {
+        email: decodedToken.email,
+        status: InviteStatus.PENDING,
+        // Opcional: verificar se o convite não expirou
+        // expiresAt: { gte: new Date() },
+      },
     });
 
-    if (userByEmail) {
-      return this.prisma.user.update({
-        where: { email: decodedToken.email },
-        data: { firebaseUid: decodedToken.uid },
-      });
-    }
-
-    const defaultRole = await this.prisma.role.findFirst({
-      where: { name: 'user' }, // Ou um role 'pending_approval'
-    });
-
-    if (!defaultRole) {
-      throw new InternalServerErrorException(
-        "Role 'user' padrão não encontrada para criar novo usuário.",
+    // 3. Se NÃO HÁ convite, rejeita o acesso
+    if (!invite) {
+      throw new ForbiddenException(
+        'Você não possui um convite válido para acessar esta plataforma.',
       );
     }
 
-    return this.prisma.user.create({
-      data: {
-        firebaseUid: decodedToken.uid,
-        email: decodedToken.email!,
-        name: decodedToken.name || 'Usuário',
-        roleId: defaultRole.id,
-      },
-    });
+    // 4. Se HÁ um convite, cria o usuário e atualiza o convite (em uma transação)
+    try {
+      const newUser = await this.prisma.$transaction(async (tx) => {
+        const createdUser = await tx.user.create({
+          data: {
+            firebaseUid: decodedToken.uid,
+            email: decodedToken.email!,
+            name: decodedToken.name || 'Usuário Convidado',
+            tenantId: invite.tenantId,
+            roleId: invite.roleId,
+            isActive: true,
+          },
+        });
+
+        await tx.userInvite.update({
+          where: { id: invite.id },
+          data: { status: InviteStatus.ACCEPTED },
+        });
+
+        return createdUser;
+      });
+      return newUser;
+    } catch (error) {
+      throw new InternalServerErrorException(
+        'Erro ao criar usuário a partir do convite.',
+      );
+    }
   }
 }
