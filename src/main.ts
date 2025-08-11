@@ -18,15 +18,50 @@ class CustomIoAdapter extends IoAdapter {
 
   createIOServer(port: number, options?: any) {
     const corsOptions = {
-      origin: this.allowedOrigins,
+      origin: (
+        origin: string,
+        callback: (error: Error | null, allow?: boolean) => void,
+      ) => {
+        // Permite conexões sem origin (mobile apps, Postman, etc.)
+        if (!origin) {
+          return callback(null, true);
+        }
+
+        // Verifica se a origin está na lista permitida
+        if (this.allowedOrigins.includes(origin)) {
+          return callback(null, true);
+        }
+
+        // Permite localhost em desenvolvimento
+        if (origin.includes('localhost') || origin.includes('127.0.0.1')) {
+          return callback(null, true);
+        }
+
+        console.warn(`WebSocket CORS: Origin não autorizada: ${origin}`);
+        return callback(new Error('Origin não autorizada pelo CORS'), false);
+      },
       methods: ['GET', 'POST'],
       credentials: true,
+      allowedHeaders: ['Content-Type', 'Authorization'],
     };
 
     const opts = {
       ...options,
       cors: corsOptions,
+      // Configurações adicionais para melhor estabilidade
+      pingTimeout: 60000, // 1 minuto
+      pingInterval: 25000, // 25 segundos
+      upgradeTimeout: 30000, // 30 segundos para upgrade
+      maxHttpBufferSize: 1e6, // 1MB
+      allowEIO3: true, // Compatibilidade com versões anteriores
+      transports: ['websocket', 'polling'],
     };
+
+    console.log('Criando servidor Socket.IO com configurações:', {
+      corsOrigins: this.allowedOrigins,
+      pingTimeout: opts.pingTimeout,
+      pingInterval: opts.pingInterval,
+    });
 
     return super.createIOServer(port, opts);
   }
@@ -40,23 +75,54 @@ async function bootstrap() {
     'http://localhost:3000',
     'http://localhost:8081',
     'http://10.250.13.156:8080',
+    // Adiciona variações para desenvolvimento
+    'http://localhost:3001',
+    'http://127.0.0.1:3000',
+    'http://127.0.0.1:3001',
   ];
+
+  // Adiciona origins do ambiente se disponível
+  if (process.env.ALLOWED_ORIGINS) {
+    const envOrigins = process.env.ALLOWED_ORIGINS.split(',').map((origin) =>
+      origin.trim(),
+    );
+    allowedOrigins.push(...envOrigins);
+  }
+
+  console.log('Origins permitidas:', allowedOrigins);
 
   const corsOptions: CorsOptions = {
     origin: (origin, callback) => {
-      if (!origin || allowedOrigins.includes(origin)) {
+      // Permite requisições sem origin (mobile apps, Postman, etc.)
+      if (!origin) {
+        return callback(null, true);
+      }
+
+      if (allowedOrigins.includes(origin)) {
         callback(null, true);
       } else {
-        callback(new Error('Origin não autorizada pelo CORS'));
+        // Em desenvolvimento, permite localhost
+        if (
+          process.env.NODE_ENV !== 'production' &&
+          (origin.includes('localhost') || origin.includes('127.0.0.1'))
+        ) {
+          callback(null, true);
+        } else {
+          console.warn(`HTTP CORS: Origin não autorizada: ${origin}`);
+          callback(new Error('Origin não autorizada pelo CORS'));
+        }
       }
     },
-    methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
+    methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
     credentials: true,
-    allowedHeaders: ['Content-Type', 'Authorization'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+    preflightContinue: false,
+    optionsSuccessStatus: 204,
   };
 
   app.enableCors(corsOptions);
 
+  // Configura o adapter WebSocket customizado
   app.useWebSocketAdapter(new CustomIoAdapter(app, allowedOrigins));
 
   app.useGlobalPipes(
@@ -64,12 +130,20 @@ async function bootstrap() {
       whitelist: true,
       forbidNonWhitelisted: true,
       transform: true,
+      disableErrorMessages: process.env.NODE_ENV === 'production',
     }),
   );
 
   app.useGlobalFilters(new AppExceptionFilter());
 
   await app.listen(port, '0.0.0.0');
+
+  console.log(`🚀 Aplicação rodando na porta ${port}`);
+  console.log(`🌐 Ambiente: ${process.env.NODE_ENV || 'development'}`);
+  console.log(`📡 WebSocket habilitado com CORS configurado`);
 }
 
-bootstrap();
+bootstrap().catch((err) => {
+  console.error('Erro ao inicializar aplicação:', err);
+  process.exit(1);
+});
