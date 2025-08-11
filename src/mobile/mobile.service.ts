@@ -4,22 +4,24 @@ import {
   BadRequestException,
   ForbiddenException,
   UnauthorizedException,
+  Inject,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { DeliveryService } from '../delivery/delivery.service';
-import { DriversService } from '../drivers/drivers.service';
-// CORREÇÃO: Importar Enums diretamente do Prisma Client
 import { OrderStatus, DeliveryStatus, PaymentStatus } from '@prisma/client';
-import * as sharp from 'sharp';
-import * as fs from 'fs';
+import {
+  IStorageProvider,
+  STORAGE_PROVIDER,
+} from '../infrastructure/storage/storage.interface';
 import * as path from 'path';
 
 @Injectable()
 export class MobileService {
   constructor(
     private readonly deliveryService: DeliveryService,
-    private readonly driversService: DriversService,
     private readonly prisma: PrismaService,
+    @Inject(STORAGE_PROVIDER)
+    private readonly storageProvider: IStorageProvider,
   ) {}
 
   private isValidUUID(id: string): boolean {
@@ -482,27 +484,23 @@ export class MobileService {
       throw new BadRequestException(`ID de pedido inválido: ${orderId}`);
     }
 
-    const backendStatusString = this.mapMobileToOrderStatus(updateData.status);
-    if (!backendStatusString) {
+    const backendStatus = this.mapMobileToOrderStatus(updateData.status);
+    if (!backendStatus) {
       throw new BadRequestException(
         `Status (mobile) inválido fornecido: ${updateData.status}`,
       );
     }
 
-    const typedBackendStatus = backendStatusString;
-
     if (
-      typedBackendStatus === OrderStatus.NAO_ENTREGUE &&
+      backendStatus === OrderStatus.NAO_ENTREGUE &&
       !updateData.motivoNaoEntrega
     ) {
-      throw new BadRequestException(
-        'O motivo da não entrega é obrigatório quando o status é "Não entregue" (retornada).',
-      );
+      throw new BadRequestException('O motivo da não entrega é obrigatório.');
     }
 
     const updatedOrder = await this.deliveryService.updateOrderStatus(
       orderId,
-      typedBackendStatus,
+      backendStatus,
       userId,
       updateData.motivoNaoEntrega,
       updateData.codigoMotivoNaoEntrega,
@@ -530,7 +528,6 @@ export class MobileService {
     if (!this.isValidUUID(orderId)) {
       throw new BadRequestException(`ID de pedido inválido: ${orderId}`);
     }
-
     const { id: driverId, tenantId } =
       await this.getDriverDetailsByUserId(userId);
 
@@ -544,58 +541,45 @@ export class MobileService {
         'Pedido não encontrado ou não pertence ao seu tenant.',
       );
     }
-
     if (order.delivery && order.delivery.driverId !== driverId) {
       throw new ForbiddenException(
         'Você não tem permissão para anexar comprovantes a este pedido.',
       );
     }
-
     if (!file) {
       throw new BadRequestException('Arquivo de imagem é obrigatório.');
     }
 
-    // Lembrete: Esta parte será refatorada futuramente para usar o StorageAdapter
-    try {
-      const uploadsDir = path.join(process.cwd(), 'uploads', 'proofs');
-      if (!fs.existsSync(uploadsDir)) {
-        fs.mkdirSync(uploadsDir, { recursive: true });
-      }
+    const fileExtension = path.extname(file.originalname) || '.jpg';
+    const fileName = `proof_${orderId}_${Date.now()}${fileExtension}`;
 
-      const fileExtension = path.extname(file.originalname);
-      const fileName = `proof_${orderId}_${Date.now()}${fileExtension}`;
-      const filePath = path.join(uploadsDir, fileName);
+    const proofUrl = await this.storageProvider.save(
+      {
+        fileName: fileName,
+        buffer: file.buffer,
+        mimetype: file.mimetype,
+      },
+      'proofs',
+    );
 
-      const compressedImage = await sharp(file.buffer)
-        .resize(800, 600, { fit: 'inside', withoutEnlargement: true })
-        .jpeg({ quality: 70 })
-        .toBuffer();
+    const proof = await this.prisma.deliveryProof.create({
+      data: {
+        orderId,
+        driverId,
+        tenantId,
+        proofUrl,
+      },
+    });
 
-      fs.writeFileSync(filePath, compressedImage);
-
-      const proof = await this.prisma.deliveryProof.create({
-        data: {
-          orderId,
-          driverId,
-          tenantId,
-          proofUrl: `/uploads/proofs/${fileName}`,
-        },
-      });
-
-      return {
-        data: {
-          id: proof.id,
-          proofUrl: proof.proofUrl,
-          message: 'Comprovante enviado com sucesso!',
-        },
-        success: true,
+    return {
+      data: {
+        id: proof.id,
+        proofUrl: proof.proofUrl,
         message: 'Comprovante enviado com sucesso!',
-      };
-    } catch (error) {
-      throw new BadRequestException(
-        'Erro ao processar a imagem do comprovante.',
-      );
-    }
+      },
+      success: true,
+      message: 'Comprovante enviado com sucesso!',
+    };
   }
 
   async getOrderProofs(orderId: string, userId: string) {
@@ -634,7 +618,6 @@ export class MobileService {
     };
   }
 
-  // CORREÇÃO: Mapeamentos ajustados para serem consistentes com frontend
   private mapRouteStatusToMobile(statusBackend: DeliveryStatus): string {
     const mapping: Record<DeliveryStatus, string> = {
       [DeliveryStatus.A_LIBERAR]: 'A_LIBERAR',
@@ -658,16 +641,12 @@ export class MobileService {
     return mapping[statusBackend] || String(statusBackend);
   }
 
-  // CORREÇÃO: Mapeamento do mobile para backend ajustado
   private mapMobileToOrderStatus(statusMobile: string): OrderStatus | null {
     const mapping: Record<string, OrderStatus> = {
-      // Mapeamentos diretos (UPPER_CASE)
       EM_ROTA: OrderStatus.EM_ROTA,
       EM_ENTREGA: OrderStatus.EM_ENTREGA,
       ENTREGUE: OrderStatus.ENTREGUE,
       NAO_ENTREGUE: OrderStatus.NAO_ENTREGUE,
-
-      // Mapeamentos alternativos para compatibilidade
       em_entrega: OrderStatus.EM_ENTREGA,
       iniciada: OrderStatus.EM_ENTREGA,
       entregue: OrderStatus.ENTREGUE,
@@ -682,13 +661,10 @@ export class MobileService {
     statusMobile: string,
   ): DeliveryStatus | null {
     const mapping: Record<string, DeliveryStatus> = {
-      // Mapeamentos diretos (UPPER_CASE)
       A_LIBERAR: DeliveryStatus.A_LIBERAR,
       INICIADO: DeliveryStatus.INICIADO,
       FINALIZADO: DeliveryStatus.FINALIZADO,
       REJEITADO: DeliveryStatus.REJEITADO,
-
-      // Mapeamentos alternativos para compatibilidade
       a_liberar: DeliveryStatus.A_LIBERAR,
       iniciado: DeliveryStatus.INICIADO,
       pendente: DeliveryStatus.INICIADO,

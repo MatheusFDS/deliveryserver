@@ -2,7 +2,7 @@
 
 import { Global, Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
-import { NotificationsModule } from '../notifications/notifications.module'; // 1. Importar
+import { NotificationsModule } from '../notifications/notifications.module';
 
 import { CACHE_SERVICE } from './cache/cache.interface';
 import { MemoryCacheService } from './cache/memory-cache.service';
@@ -20,12 +20,12 @@ import { NotificationGateway } from './notifications/notification.gateway';
 import { AUDIT_PROVIDER } from './audit/audit.interface';
 import { ConsoleAuditProvider } from './audit/console-audit.provider';
 
+import { STORAGE_PROVIDER } from './storage/storage.interface';
+import { LocalStorageProvider } from './storage/local-storage.provider';
+
 @Global()
 @Module({
-  imports: [
-    ConfigModule,
-    NotificationsModule, // 2. Adicionar aqui
-  ],
+  imports: [ConfigModule, NotificationsModule],
   providers: [
     {
       provide: CACHE_SERVICE,
@@ -47,6 +47,10 @@ import { ConsoleAuditProvider } from './audit/console-audit.provider';
       provide: AUDIT_PROVIDER,
       useClass: ConsoleAuditProvider,
     },
+    {
+      provide: STORAGE_PROVIDER,
+      useClass: LocalStorageProvider,
+    },
     NotificationGateway,
   ],
   exports: [
@@ -55,6 +59,7 @@ import { ConsoleAuditProvider } from './audit/console-audit.provider';
     RETRY_SERVICE,
     NOTIFICATION_PROVIDER,
     AUDIT_PROVIDER,
+    STORAGE_PROVIDER,
   ],
 })
 export class InfrastructureModule {}
