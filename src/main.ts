@@ -4,7 +4,33 @@ import { ValidationPipe } from '@nestjs/common';
 import { CorsOptions } from '@nestjs/common/interfaces/external/cors-options.interface';
 import { AppExceptionFilter } from './common/filters/app-exception.filter';
 import { IoAdapter } from '@nestjs/platform-socket.io';
+import { INestApplicationContext } from '@nestjs/common';
+
 const port = process.env.PORT || 4000;
+
+class CustomIoAdapter extends IoAdapter {
+  private allowedOrigins: string[];
+
+  constructor(app: INestApplicationContext, allowedOrigins: string[]) {
+    super(app);
+    this.allowedOrigins = allowedOrigins;
+  }
+
+  createIOServer(port: number, options?: any) {
+    const corsOptions = {
+      origin: this.allowedOrigins,
+      methods: ['GET', 'POST'],
+      credentials: true,
+    };
+
+    const opts = {
+      ...options,
+      cors: corsOptions,
+    };
+
+    return super.createIOServer(port, opts);
+  }
+}
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -31,7 +57,7 @@ async function bootstrap() {
 
   app.enableCors(corsOptions);
 
-  app.useWebSocketAdapter(new IoAdapter(app));
+  app.useWebSocketAdapter(new CustomIoAdapter(app, allowedOrigins));
 
   app.useGlobalPipes(
     new ValidationPipe({
