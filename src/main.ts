@@ -22,18 +22,34 @@ class CustomIoAdapter extends IoAdapter {
         origin: string,
         callback: (error: Error | null, allow?: boolean) => void,
       ) => {
-        // Permite conexões sem origin (mobile apps, Postman, etc.)
+        // SEMPRE permite conexões sem origin (mobile apps, Postman, etc.)
         if (!origin) {
+          console.log('WebSocket: Permitindo conexão sem origin (mobile/app)');
           return callback(null, true);
         }
 
         // Verifica se a origin está na lista permitida
         if (this.allowedOrigins.includes(origin)) {
+          console.log('WebSocket: Origin autorizada:', origin);
           return callback(null, true);
         }
 
-        // Permite localhost em desenvolvimento
-        if (origin.includes('localhost') || origin.includes('127.0.0.1')) {
+        // Permite localhost em qualquer porta para desenvolvimento
+        if (
+          origin.includes('localhost') ||
+          origin.includes('127.0.0.1') ||
+          origin.includes('192.168.')
+        ) {
+          console.log('WebSocket: Permitindo localhost/LAN:', origin);
+          return callback(null, true);
+        }
+
+        // IMPORTANTE: Para mobile apps, permite conexões do próprio servidor
+        if (origin.includes('deliveryserver-production.up.railway.app')) {
+          console.log(
+            'WebSocket: Permitindo conexão do próprio servidor:',
+            origin,
+          );
           return callback(null, true);
         }
 
