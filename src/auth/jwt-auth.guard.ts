@@ -1,5 +1,3 @@
-// src/auth/jwt-auth.guard.ts
-
 import {
   ExecutionContext,
   Injectable,
@@ -30,10 +28,7 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
     }
 
     try {
-      // 1. Valida o token usando o provedor externo (Firebase)
       const decodedToken = await this.authProvider.validateToken(token);
-
-      // 2. Sincroniza o usuário (encontra ou cria baseado no convite)
       const userFromDb = await this.authProvider.findOrCreateUser(decodedToken);
 
       if (!userFromDb || !userFromDb.isActive) {
@@ -42,19 +37,17 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
         );
       }
 
-      // 3. Anexa o usuário do *nosso banco de dados* à requisição
-      // Isso garante que o resto da aplicação (ex: RolesGuard) use nosso User model.
       request.user = {
         userId: userFromDb.id,
         email: userFromDb.email,
-        role: userFromDb.roleId, // O RolesGuard precisará do ID ou do nome da role
+        role: userFromDb.role.name,
+        roleId: userFromDb.roleId,
         tenantId: userFromDb.tenantId,
         firebaseUid: userFromDb.firebaseUid,
       };
 
       return true;
     } catch (error) {
-      // Re-lança exceções já tratadas (como Unauthorized ou Forbidden)
       if (
         error.getStatus &&
         typeof error.getStatus === 'function' &&
@@ -62,7 +55,6 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
       ) {
         throw error;
       }
-      // Para erros inesperados, lança um erro de servidor genérico
       throw new InternalServerErrorException(
         'Erro ao validar a autenticação do usuário.',
       );
@@ -77,8 +69,6 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
     return authHeader.split(' ')[1];
   }
 
-  // A validação manual no canActivate torna o handleRequest do Passport obsoleto para esta lógica.
-  // No entanto, o método precisa existir.
   handleRequest(err, user) {
     if (err || !user) {
       throw (

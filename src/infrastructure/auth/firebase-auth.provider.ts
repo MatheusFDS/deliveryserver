@@ -1,5 +1,3 @@
-// src/infrastructure/auth/firebase-auth.provider.ts
-
 import {
   Injectable,
   UnauthorizedException,
@@ -9,8 +7,12 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../prisma/prisma.service';
-import { IAuthProvider, DecodedToken } from './auth.provider.interface';
-import { User as PrismaUser, InviteStatus } from '@prisma/client';
+import {
+  IAuthProvider,
+  DecodedToken,
+  UserWithRole,
+} from './auth.provider.interface';
+import { InviteStatus } from '@prisma/client';
 import * as admin from 'firebase-admin';
 
 @Injectable()
@@ -57,34 +59,31 @@ export class FirebaseAuthProvider implements IAuthProvider, OnModuleInit {
     }
   }
 
-  async findOrCreateUser(decodedToken: DecodedToken): Promise<PrismaUser> {
-    // 1. Verifica se o usuário já existe pelo firebaseUid
+  async findOrCreateUser(decodedToken: DecodedToken): Promise<UserWithRole> {
     const existingUser = await this.prisma.user.findUnique({
       where: { firebaseUid: decodedToken.uid },
+      include: {
+        role: true,
+      },
     });
 
     if (existingUser) {
-      return existingUser;
+      return existingUser as UserWithRole;
     }
 
-    // 2. Se não existe, verifica se há um convite PENDENTE para o e-mail do token
     const invite = await this.prisma.userInvite.findFirst({
       where: {
         email: decodedToken.email,
         status: InviteStatus.PENDING,
-        // Opcional: verificar se o convite não expirou
-        // expiresAt: { gte: new Date() },
       },
     });
 
-    // 3. Se NÃO HÁ convite, rejeita o acesso
     if (!invite) {
       throw new ForbiddenException(
         'Você não possui um convite válido para acessar esta plataforma.',
       );
     }
 
-    // 4. Se HÁ um convite, cria o usuário e atualiza o convite (em uma transação)
     try {
       const newUser = await this.prisma.$transaction(async (tx) => {
         const createdUser = await tx.user.create({
@@ -96,6 +95,9 @@ export class FirebaseAuthProvider implements IAuthProvider, OnModuleInit {
             roleId: invite.roleId,
             isActive: true,
           },
+          include: {
+            role: true,
+          },
         });
 
         await tx.userInvite.update({
@@ -105,11 +107,26 @@ export class FirebaseAuthProvider implements IAuthProvider, OnModuleInit {
 
         return createdUser;
       });
-      return newUser;
+      return newUser as UserWithRole;
     } catch (error) {
       throw new InternalServerErrorException(
         'Erro ao criar usuário a partir do convite.',
       );
     }
+  }
+
+  async getUserWithRoleDetails(userId: string): Promise<UserWithRole> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      include: {
+        role: true,
+      },
+    });
+
+    if (!user) {
+      throw new UnauthorizedException('Usuário não encontrado.');
+    }
+
+    return user as UserWithRole;
   }
 }

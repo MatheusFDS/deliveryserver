@@ -13,7 +13,7 @@ import {
   ParseIntPipe,
 } from '@nestjs/common';
 import { UsersService } from './users.service';
-import { InviteUserDto } from './dto/invite-user.dto'; // 1. Mudar o DTO
+import { InviteUserDto } from './dto/invite-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
@@ -31,7 +31,6 @@ export class UsersController {
     return this.usersService.findOneById(userId);
   }
 
-  // 2. O endpoint de criação agora é para convidar
   @Post()
   @Roles('admin')
   async invite(@Body() inviteUserDto: InviteUserDto, @Req() req: Request) {

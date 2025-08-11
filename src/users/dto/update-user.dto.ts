@@ -1,11 +1,11 @@
 import { PartialType } from '@nestjs/mapped-types';
 import { CreateUserDto } from './create-user.dto';
-import { IsBoolean, IsOptional } from 'class-validator'; // Adicionar IsBoolean
+import { IsBoolean, IsOptional } from 'class-validator';
 
 export class UpdateUserDto extends PartialType(CreateUserDto) {
-  @IsOptional() // Opcional, pois pode não ser sempre fornecido na atualização
+  @IsOptional()
   @IsBoolean({
     message: 'O campo isActive deve ser um booleano (verdadeiro ou falso).',
   })
-  isActive?: boolean; // Alterado para opcional com '?'
+  isActive?: boolean;
 }

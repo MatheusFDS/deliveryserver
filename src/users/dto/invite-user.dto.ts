@@ -1,5 +1,3 @@
-// src/users/dto/invite-user.dto.ts
-
 import { IsEmail, IsUUID, IsNotEmpty, MaxLength } from 'class-validator';
 
 export class InviteUserDto {

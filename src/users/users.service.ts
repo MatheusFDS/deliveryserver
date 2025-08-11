@@ -51,10 +51,6 @@ export class UsersService {
     return user;
   }
 
-  // ==============================================================
-  // OPERAÇÕES DE USUÁRIO - NÍVEL DE TENANT (Admin do Tenant)
-  // ==============================================================
-
   async inviteUserForTenant(
     inviteUserDto: InviteUserDto,
     requestingUserId: string,
@@ -106,11 +102,9 @@ export class UsersService {
           tenantId,
           invitedBy: requestingUserId,
           status: InviteStatus.PENDING,
-          expiresAt: addDays(new Date(), 7), // Convite expira em 7 dias
+          expiresAt: addDays(new Date(), 7),
         },
       });
-
-      // TODO: Integrar serviço de e-mail para enviar o convite.
 
       return {
         message: 'Convite enviado com sucesso!',
@@ -315,10 +309,6 @@ export class UsersService {
       );
     }
   }
-
-  // ==============================================================
-  // OPERAÇÕES DE USUÁRIO - NÍVEL DE PLATAFORMA (Superadmin)
-  // ==============================================================
 
   async createPlatformUser(
     createUserDto: CreateUserDto,
