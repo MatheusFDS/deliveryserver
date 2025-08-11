@@ -9,11 +9,12 @@ import {
   WebSocketServer,
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
+import * as jwt from 'jsonwebtoken';
 
 @WebSocketGateway({
-  cors: {
-    origin: '*', // Em produção, restrinja para o seu domínio do frontend
-  },
+  cors: { origin: '*' },
+  pingInterval: 30000, // 30s
+  pingTimeout: 60000, // 60s
 })
 export class NotificationGateway
   implements OnGatewayConnection, OnGatewayDisconnect
@@ -22,37 +23,85 @@ export class NotificationGateway
   server: Server;
 
   private readonly logger = new Logger(NotificationGateway.name);
-  private connectedUsers = new Map<string, string>(); // Mapeia userId para socketId
 
-  handleConnection(client: Socket) {
-    this.logger.log(`Cliente conectado: ${client.id}`);
+  // userId -> Set de socketIds
+  private connectedUsers = new Map<string, Set<string>>();
+
+  async handleConnection(client: Socket) {
+    try {
+      const token =
+        client.handshake.auth?.token ||
+        client.handshake.headers?.authorization?.replace('Bearer ', '');
+
+      if (!token) {
+        this.logger.warn(`Conexão recusada: token ausente (${client.id})`);
+        client.disconnect();
+        return;
+      }
+
+      // Valida token (substituir pela sua chave secreta real)
+      const decoded: any = jwt.verify(
+        token,
+        process.env.JWT_SECRET || 'sua_chave_aqui',
+      );
+      const userId = decoded?.sub || decoded?.userId;
+
+      if (!userId) {
+        this.logger.warn(`Conexão recusada: token inválido (${client.id})`);
+        client.disconnect();
+        return;
+      }
+
+      // Registra conexão
+      if (!this.connectedUsers.has(userId)) {
+        this.connectedUsers.set(userId, new Set());
+      }
+      this.connectedUsers.get(userId)!.add(client.id);
+
+      this.logger.log(`Cliente conectado: ${client.id} (usuário ${userId})`);
+      client.data.userId = userId; // salva no socket para uso no disconnect
+    } catch (err) {
+      this.logger.error(
+        `Falha na autenticação do socket (${client.id})`,
+        err.message,
+      );
+      client.disconnect();
+    }
   }
 
   handleDisconnect(client: Socket) {
-    for (const [userId, socketId] of this.connectedUsers.entries()) {
-      if (socketId === client.id) {
+    const userId = client.data.userId;
+    if (userId && this.connectedUsers.has(userId)) {
+      const sockets = this.connectedUsers.get(userId)!;
+      sockets.delete(client.id);
+      if (sockets.size === 0) {
         this.connectedUsers.delete(userId);
-        this.logger.log(`Usuário desconectado e desregistrado: ${userId}`);
-        break;
       }
+      this.logger.log(`Cliente desconectado: ${client.id} (usuário ${userId})`);
+    } else {
+      this.logger.log(
+        `Cliente desconectado: ${client.id} (sem usuário associado)`,
+      );
     }
-    this.logger.log(`Cliente desconectado: ${client.id}`);
   }
 
-  @SubscribeMessage('register')
+  @SubscribeMessage('register') // opcional agora, pois já autenticamos no handshake
   handleRegister(client: Socket, userId: string): void {
-    // Em uma aplicação real, você validaria o userId com o token JWT do handshake
-    this.logger.log(`Registrando usuário ${userId} para o socket ${client.id}`);
-    this.connectedUsers.set(userId, client.id);
+    // Poderia validar se userId bate com o do token
+    this.logger.log(
+      `Usuário ${userId} confirmou registro no socket ${client.id}`,
+    );
   }
 
   sendToUser(userId: string, event: string, data: any): void {
-    const socketId = this.connectedUsers.get(userId);
-    if (socketId) {
+    const socketIds = this.connectedUsers.get(userId);
+    if (socketIds && socketIds.size > 0) {
       this.logger.log(
-        `Enviando evento '${event}' para usuário ${userId} no socket ${socketId}`,
+        `Enviando evento '${event}' para usuário ${userId} (${socketIds.size} conexões)`,
       );
-      this.server.to(socketId).emit(event, data);
+      socketIds.forEach((socketId) => {
+        this.server.to(socketId).emit(event, data);
+      });
     } else {
       this.logger.warn(
         `Não foi possível enviar evento '${event}'. Usuário ${userId} não está conectado.`,
