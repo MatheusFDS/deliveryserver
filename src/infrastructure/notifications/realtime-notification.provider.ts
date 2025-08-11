@@ -67,16 +67,16 @@ export class RealtimeNotificationProvider implements INotificationProvider {
       case 'delivery-needs-approval':
       case 'delivery-needs-reapproval':
       case 'delivery-completed':
-        return `/delivery/${data.deliveryId}`;
+        return `/entregas/${data.deliveryId}`;
 
       case 'delivery-needs-reapproval-order-removed':
-        return `/delivery/${data.deliveryId}`;
+        return `/entregas/${data.deliveryId}`;
 
       case 'order-status-changed':
         if (data.orderNumber) {
-          return `/orders?search=${data.orderNumber}`;
+          return `/pedidos?search=${data.orderNumber}`;
         }
-        return `/delivery/${data.deliveryId}`;
+        return `/entregas/${data.deliveryId}`;
 
       default:
         return '/';
