@@ -73,6 +73,26 @@ export class DeliveryService {
     return driver;
   }
 
+  private async getDriverUserId(driverId: string): Promise<string | null> {
+    const driver = await this.prisma.driver.findUnique({
+      where: { id: driverId },
+      select: { userId: true },
+    });
+    return driver?.userId || null;
+  }
+
+  private async getAdminUsers(tenantId: string): Promise<string[]> {
+    const adminUsers = await this.prisma.user.findMany({
+      where: {
+        tenantId,
+        role: { name: { in: ['admin', 'user'] } },
+        isActive: true,
+      },
+      select: { id: true },
+    });
+    return adminUsers.map((user) => user.id);
+  }
+
   private isValidOrderStatusTransition(
     currentStatus: OrderStatus,
     newStatus: OrderStatus,
@@ -181,12 +201,20 @@ export class DeliveryService {
     });
 
     if (validationResult.needsApproval) {
-      await this.notificationProvider.send({
-        recipient: { userId: 'admin-group' },
-        channels: ['email'],
-        templateId: 'delivery-needs-approval',
-        data: { deliveryId: delivery.id, reasons: validationResult.reasons },
-      });
+      const adminUsers = await this.getAdminUsers(tenantId);
+      for (const adminUserId of adminUsers) {
+        await this.notificationProvider.send({
+          recipient: { userId: adminUserId },
+          channels: ['push', 'email'],
+          templateId: 'delivery-needs-approval',
+          data: {
+            deliveryId: delivery.id,
+            reasons: validationResult.reasons,
+            tenantId,
+            linkTo: `/entregas/${delivery.id}`,
+          },
+        });
+      }
     }
 
     return {
@@ -304,6 +332,7 @@ export class DeliveryService {
     const tenantId = await this.getTenantIdFromUserId(userId);
     const delivery = await this.prisma.delivery.findFirst({
       where: { id: deliveryId, tenantId },
+      include: { driver: { select: { name: true, userId: true } } },
     });
 
     if (!delivery) throw new NotFoundException('Roteiro não encontrado.');
@@ -334,12 +363,20 @@ export class DeliveryService {
       target: { entity: 'Delivery', entityId: deliveryId },
       timestamp: new Date(),
     });
-    await this.notificationProvider.send({
-      recipient: { userId: delivery.driverId },
-      channels: ['push', 'sms'],
-      templateId: 'delivery-approved-for-driver',
-      data: { deliveryId },
-    });
+
+    if (delivery.driver.userId) {
+      await this.notificationProvider.send({
+        recipient: { userId: delivery.driver.userId },
+        channels: ['push', 'sms'],
+        templateId: 'delivery-approved-for-driver',
+        data: {
+          deliveryId,
+          driverName: delivery.driver.name,
+          tenantId,
+          linkTo: `/(tabs)`,
+        },
+      });
+    }
 
     return {
       message: 'Roteiro liberado com sucesso!',
@@ -351,6 +388,7 @@ export class DeliveryService {
     const tenantId = await this.getTenantIdFromUserId(userId);
     const delivery = await this.prisma.delivery.findFirst({
       where: { id: deliveryId, tenantId },
+      include: { driver: { select: { name: true, userId: true } } },
     });
 
     if (!delivery) throw new NotFoundException('Roteiro não encontrado.');
@@ -386,6 +424,21 @@ export class DeliveryService {
       timestamp: new Date(),
     });
 
+    if (delivery.driver.userId) {
+      await this.notificationProvider.send({
+        recipient: { userId: delivery.driver.userId },
+        channels: ['push', 'email'],
+        templateId: 'delivery-rejected',
+        data: {
+          deliveryId,
+          reason: motivo,
+          driverName: delivery.driver.name,
+          tenantId,
+          linkTo: `/(tabs)`,
+        },
+      });
+    }
+
     return {
       message: 'Roteiro rejeitado com sucesso.',
       delivery: updatedDelivery,
@@ -402,7 +455,13 @@ export class DeliveryService {
     const driver = await this.getDriverByUserId(userId);
     const order = await this.prisma.order.findFirst({
       where: { id: orderId, tenantId: driver.tenantId },
-      include: { delivery: true },
+      include: {
+        delivery: {
+          include: {
+            driver: { select: { name: true } },
+          },
+        },
+      },
     });
 
     if (!order)
@@ -447,16 +506,45 @@ export class DeliveryService {
         status: { in: [OrderStatus.EM_ROTA, OrderStatus.EM_ENTREGA] },
       },
     });
+
     if (remainingOrders === 0) {
       await this.prisma.delivery.update({
         where: { id: order.deliveryId! },
         data: { status: DeliveryStatus.FINALIZADO, dataFim: new Date() },
       });
+
+      const adminUsers = await this.getAdminUsers(driver.tenantId);
+      for (const adminUserId of adminUsers) {
+        await this.notificationProvider.send({
+          recipient: { userId: adminUserId },
+          channels: ['push', 'email'],
+          templateId: 'delivery-completed',
+          data: {
+            deliveryId: order.deliveryId,
+            driverName: order.delivery.driver.name,
+            tenantId: driver.tenantId,
+            linkTo: `/entregas/${order.deliveryId}`,
+          },
+        });
+      }
+    }
+
+    const adminUsers = await this.getAdminUsers(driver.tenantId);
+    for (const adminUserId of adminUsers) {
       await this.notificationProvider.send({
-        recipient: { userId: 'admin-group' },
-        channels: ['email'],
-        templateId: 'delivery-completed',
-        data: { deliveryId: order.deliveryId },
+        recipient: { userId: adminUserId },
+        channels: ['push', 'email'],
+        templateId: 'order-status-changed',
+        data: {
+          orderId,
+          newStatus,
+          oldStatus: order.status,
+          deliveryId: order.deliveryId,
+          customerName: order.cliente,
+          driverName: order.delivery.driver.name,
+          tenantId: driver.tenantId,
+          linkTo: `/entregas/${order.deliveryId}`,
+        },
       });
     }
 
@@ -465,7 +553,7 @@ export class DeliveryService {
       tenantId: driver.tenantId,
       action: 'UPDATE_ORDER_STATUS',
       target: { entity: 'Order', entityId: orderId },
-      details: { newStatus },
+      details: { newStatus, oldStatus: order.status },
       timestamp: new Date(),
     });
 
@@ -593,12 +681,21 @@ export class DeliveryService {
         where: { deliveryId: id },
         data: { status: OrderStatus.EM_ROTA_AGUARDANDO_LIBERACAO },
       });
-      await this.notificationProvider.send({
-        recipient: { userId: 'admin-group' },
-        channels: ['email'],
-        templateId: 'delivery-needs-reapproval',
-        data: { deliveryId: id, reasons: validationResult.reasons },
-      });
+
+      const adminUsers = await this.getAdminUsers(tenantId);
+      for (const adminUserId of adminUsers) {
+        await this.notificationProvider.send({
+          recipient: { userId: adminUserId },
+          channels: ['push', 'email'],
+          templateId: 'delivery-needs-reapproval',
+          data: {
+            deliveryId: id,
+            reasons: validationResult.reasons,
+            tenantId,
+            linkTo: `/entregas/${id}`,
+          },
+        });
+      }
     }
 
     const updatedDelivery = await this.prisma.delivery.update({
@@ -715,12 +812,21 @@ export class DeliveryService {
         where: { deliveryId },
         data: { status: OrderStatus.EM_ROTA_AGUARDANDO_LIBERACAO },
       });
-      await this.notificationProvider.send({
-        recipient: { userId: 'admin-group' },
-        channels: ['email'],
-        templateId: 'delivery-needs-reapproval-order-removed',
-        data: { deliveryId, orderId },
-      });
+
+      const adminUsers = await this.getAdminUsers(tenantId);
+      for (const adminUserId of adminUsers) {
+        await this.notificationProvider.send({
+          recipient: { userId: adminUserId },
+          channels: ['push', 'email'],
+          templateId: 'delivery-needs-reapproval-order-removed',
+          data: {
+            deliveryId,
+            orderId,
+            tenantId,
+            linkTo: `/entregas/${deliveryId}`,
+          },
+        });
+      }
     }
 
     await this.prisma.delivery.update({
