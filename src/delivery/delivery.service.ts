@@ -37,6 +37,8 @@ import {
 
 @Injectable()
 export class DeliveryService {
+  private readonly logger = new Logger(DeliveryService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     @Inject(FREIGHT_CALCULATOR_PROVIDER)
@@ -46,7 +48,6 @@ export class DeliveryService {
     @Inject(AUDIT_PROVIDER) private readonly auditProvider: IAuditProvider,
     @Inject(NOTIFICATION_PROVIDER)
     private readonly notificationProvider: INotificationProvider,
-    private readonly logger = new Logger(DeliveryService.name),
   ) {}
 
   private async getTenantIdFromUserId(userId: string): Promise<string> {
