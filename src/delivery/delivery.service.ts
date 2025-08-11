@@ -234,7 +234,6 @@ export class DeliveryService {
               deliveryId: delivery.id,
               reasons: validationResult.reasons,
               tenantId,
-              linkTo: `/entregas/${delivery.id}`,
             },
           }),
       );
@@ -399,7 +398,6 @@ export class DeliveryService {
               deliveryId,
               driverName: delivery.driver.name,
               tenantId,
-              linkTo: `/(tabs)`,
             },
           }),
       ];
@@ -464,7 +462,6 @@ export class DeliveryService {
               reason: motivo,
               driverName: delivery.driver.name,
               tenantId,
-              linkTo: `/(tabs)`,
             },
           }),
       ];
@@ -572,7 +569,6 @@ export class DeliveryService {
                 deliveryId: order.deliveryId,
                 driverName: order.delivery.driver.name,
                 tenantId: driver.tenantId,
-                linkTo: `/entregas/${order.deliveryId}`,
               },
             }),
         ),
@@ -594,7 +590,6 @@ export class DeliveryService {
               customerName: order.cliente,
               driverName: order.delivery.driver.name,
               tenantId: driver.tenantId,
-              linkTo: `/entregas/${order.deliveryId}`,
               orderNumber: order.numero,
             },
           }),
@@ -739,7 +734,6 @@ export class DeliveryService {
               deliveryId: id,
               reasons: validationResult.reasons,
               tenantId,
-              linkTo: `/entregas/${id}`,
             },
           }),
       );
@@ -872,7 +866,6 @@ export class DeliveryService {
               deliveryId,
               orderId,
               tenantId,
-              linkTo: `/entregas/${deliveryId}`,
               orderNumber: order.numero,
             },
           }),

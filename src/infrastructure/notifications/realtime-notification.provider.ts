@@ -25,7 +25,7 @@ export class RealtimeNotificationProvider implements INotificationProvider {
           tenantId: data.tenantId,
           type: templateId,
           message: this.generateMessage(templateId, data),
-          linkTo: data.linkTo || null,
+          linkTo: this.generateLinkTo(templateId, data),
         });
       } catch (error) {
         this.logger.error(
@@ -55,6 +55,31 @@ export class RealtimeNotificationProvider implements INotificationProvider {
         default:
           this.logger.warn(`Canal de notificação '${channel}' não suportado.`);
       }
+    }
+  }
+
+  private generateLinkTo(templateId: string, data: any): string {
+    switch (templateId) {
+      case 'delivery-approved-for-driver':
+      case 'delivery-rejected':
+        return '/(tabs)';
+
+      case 'delivery-needs-approval':
+      case 'delivery-needs-reapproval':
+      case 'delivery-completed':
+        return `/delivery/${data.deliveryId}`;
+
+      case 'delivery-needs-reapproval-order-removed':
+        return `/delivery/${data.deliveryId}`;
+
+      case 'order-status-changed':
+        if (data.orderNumber) {
+          return `/orders?search=${data.orderNumber}`;
+        }
+        return `/delivery/${data.deliveryId}`;
+
+      default:
+        return '/';
     }
   }
 
