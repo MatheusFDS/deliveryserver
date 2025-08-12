@@ -155,15 +155,147 @@ export class EmailService {
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>Convite para Sistema de Gestão</title>
         <style>
-            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-            .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-            .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0; }
-            .content { background: #f9f9f9; padding: 30px; border-radius: 0 0 10px 10px; }
-            .button { display: inline-block; background: #667eea; color: white; padding: 15px 30px; text-decoration: none; border-radius: 5px; margin: 20px 0; font-weight: bold; }
-            .button:hover { background: #5a67d8; }
-            .info-box { background: white; border-left: 4px solid #667eea; padding: 15px; margin: 20px 0; }
-            .footer { text-align: center; margin-top: 30px; color: #666; font-size: 12px; }
-            .warning { background: #fff3cd; border: 1px solid #ffeaa7; padding: 15px; border-radius: 5px; margin: 20px 0; }
+            body { 
+                font-family: "Inter", "Roboto", "Helvetica", "Arial", sans-serif; 
+                line-height: 1.6; 
+                color: #2e3440; 
+                margin: 0; 
+                padding: 0;
+                background-color: #f7f8fa;
+            }
+            .container { 
+                max-width: 600px; 
+                margin: 0 auto; 
+                padding: 20px; 
+            }
+            .header { 
+                background: linear-gradient(135deg, #00695c 0%, #004c40 100%); 
+                color: white; 
+                padding: 40px 30px; 
+                text-align: center; 
+                border-radius: 12px 12px 0 0; 
+                box-shadow: 0px 4px 8px rgba(0, 105, 92, 0.2);
+            }
+            .header h1 {
+                margin: 0 0 10px 0;
+                font-size: 2rem;
+                font-weight: 600;
+            }
+            .header p {
+                margin: 0;
+                font-size: 1.1rem;
+                opacity: 0.9;
+            }
+            .content { 
+                background: #ffffff; 
+                padding: 40px 30px; 
+                border-radius: 0 0 12px 12px;
+                box-shadow: 0px 1px 3px rgba(0, 0, 0, 0.08), 0px 2px 2px rgba(0, 0, 0, 0.12);
+            }
+            .content h2 {
+                color: #2e3440;
+                font-size: 1.5rem;
+                font-weight: 500;
+                margin: 0 0 20px 0;
+            }
+            .content p {
+                color: #2e3440;
+                font-size: 0.875rem;
+                line-height: 1.6;
+                margin: 0 0 15px 0;
+            }
+            .button { 
+                display: inline-block; 
+                background: #00695c; 
+                color: white; 
+                padding: 16px 32px; 
+                text-decoration: none; 
+                border-radius: 8px; 
+                margin: 25px 0; 
+                font-weight: 500;
+                font-size: 0.875rem;
+                box-shadow: 0px 2px 4px rgba(0, 105, 92, 0.3);
+                transition: all 0.2s ease;
+            }
+            .button:hover { 
+                background: #004c40; 
+                box-shadow: 0px 4px 8px rgba(0, 105, 92, 0.4);
+            }
+            .info-box { 
+                background: #f7f8fa; 
+                border-left: 4px solid #00695c; 
+                padding: 20px; 
+                margin: 25px 0; 
+                border-radius: 0 8px 8px 0;
+            }
+            .info-box h3 {
+                color: #2e3440;
+                font-size: 1rem;
+                font-weight: 500;
+                margin: 0 0 15px 0;
+            }
+            .info-box p {
+                margin: 8px 0;
+            }
+            .warning { 
+                background: rgba(237, 108, 2, 0.1); 
+                border: 1px solid rgba(237, 108, 2, 0.2); 
+                color: #e65100;
+                padding: 20px; 
+                border-radius: 8px; 
+                margin: 25px 0; 
+            }
+            .warning strong {
+                color: #ed6c02;
+            }
+            .footer { 
+                text-align: center; 
+                margin-top: 30px; 
+                color: #5e6b73; 
+                font-size: 0.75rem; 
+                line-height: 1.4;
+            }
+            .link-box {
+                background: #f1f3f4; 
+                padding: 15px; 
+                border-radius: 8px; 
+                word-break: break-all; 
+                font-family: "Roboto Mono", monospace;
+                font-size: 0.75rem;
+                color: #5e6b73;
+                margin: 15px 0;
+            }
+            .steps-list {
+                background: #f7f8fa;
+                padding: 20px;
+                border-radius: 8px;
+                margin: 20px 0;
+            }
+            .steps-list ol {
+                margin: 0;
+                padding-left: 20px;
+            }
+            .steps-list li {
+                margin: 8px 0;
+                color: #2e3440;
+            }
+            hr {
+                margin: 30px 0; 
+                border: none; 
+                border-top: 1px solid #e0e4e7;
+            }
+            .highlight {
+                color: #00695c;
+                font-weight: 500;
+            }
+            .company-tag {
+                background: rgba(0, 105, 92, 0.1);
+                color: #00695c;
+                padding: 4px 8px;
+                border-radius: 4px;
+                font-size: 0.75rem;
+                font-weight: 500;
+            }
         </style>
     </head>
     <body>
@@ -176,11 +308,11 @@ export class EmailService {
             <div class="content">
                 <h2>Olá!</h2>
                 
-                <p><strong>${inviterName}</strong> convidou você para fazer parte do sistema de gestão${tenantName ? ` da empresa <strong>${tenantName}</strong>` : ' da <strong>plataforma</strong>'}.</p>
+                <p><strong class="highlight">${inviterName}</strong> convidou você para fazer parte do sistema de gestão${tenantName ? ` da empresa <span class="company-tag">${tenantName}</span>` : ' da <strong class="highlight">plataforma</strong>'}.</p>
                 
                 <div class="info-box">
                     <h3>📋 Detalhes do convite:</h3>
-                    <p><strong>Perfil:</strong> ${roleName}</p>
+                    <p><strong>Perfil:</strong> <span class="highlight">${roleName}</span></p>
                     ${tenantName ? `<p><strong>Empresa:</strong> ${tenantName}</p>` : '<p><strong>Tipo:</strong> Acesso à plataforma administrativa</p>'}
                     <p><strong>Convidado por:</strong> ${inviterName}</p>
                 </div>
@@ -196,21 +328,21 @@ export class EmailService {
                     Certifique-se de aceitar antes desta data.
                 </div>
                 
-                <p><strong>O que acontece depois?</strong></p>
-                <ol>
-                    <li>Clique no botão "Aceitar Convite"</li>
-                    <li>Você será redirecionado para criar sua conta</li>
-                    <li>Use sua conta Google ou email para fazer login</li>
-                    <li>Comece a usar o sistema imediatamente!</li>
-                </ol>
+                <h3 style="color: #2e3440; font-size: 1rem; margin: 25px 0 15px 0;">O que acontece depois?</h3>
+                <div class="steps-list">
+                    <ol>
+                        <li>Clique no botão "Aceitar Convite"</li>
+                        <li>Você será redirecionado para criar sua conta</li>
+                        <li>Use sua conta Google ou email para fazer login</li>
+                        <li>Comece a usar o sistema imediatamente!</li>
+                    </ol>
+                </div>
                 
-                <hr style="margin: 30px 0; border: none; border-top: 1px solid #eee;">
+                <hr>
                 
-                <p><strong>Problemas para aceitar?</strong></p>
+                <h3 style="color: #2e3440; font-size: 1rem; margin: 20px 0 10px 0;">Problemas para aceitar?</h3>
                 <p>Se o botão não funcionar, copie e cole este link no seu navegador:</p>
-                <p style="background: #f1f1f1; padding: 10px; border-radius: 5px; word-break: break-all; font-family: monospace;">
-                    ${acceptUrl}
-                </p>
+                <div class="link-box">${acceptUrl}</div>
             </div>
             
             <div class="footer">
@@ -229,24 +361,24 @@ export class EmailService {
     const customer = customerName || 'Cliente';
 
     let statusMessage = '';
-    let statusColor = '#667eea';
+    let statusColor = '#00695c';
 
     switch (newStatus) {
       case 'EM_ENTREGA':
         statusMessage = 'Entrega iniciada';
-        statusColor = '#ff9500';
+        statusColor = '#ff6f00';
         break;
       case 'ENTREGUE':
         statusMessage = 'Entregue com sucesso';
-        statusColor = '#28a745';
+        statusColor = '#2e7d32';
         break;
       case 'NAO_ENTREGUE':
         statusMessage = 'Não foi possível entregar';
-        statusColor = '#dc3545';
+        statusColor = '#d32f2f';
         break;
       case 'EM_ROTA':
         statusMessage = 'Saiu para entrega';
-        statusColor = '#007bff';
+        statusColor = '#0288d1';
         break;
       default:
         statusMessage = `Status atualizado para ${newStatus}`;
@@ -260,13 +392,97 @@ export class EmailService {
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>Atualização do Pedido ${orderNumber}</title>
         <style>
-            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 20px; }
-            .container { max-width: 600px; margin: 0 auto; background: white; border-radius: 10px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-            .header { background: ${statusColor}; color: white; padding: 30px; text-align: center; }
-            .content { padding: 30px; }
-            .status-badge { background: ${statusColor}; color: white; padding: 8px 16px; border-radius: 20px; display: inline-block; font-weight: bold; }
-            .info-row { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #eee; }
-            .footer { background: #f8f9fa; padding: 20px; text-align: center; color: #666; font-size: 12px; }
+            body { 
+                font-family: "Inter", "Roboto", "Helvetica", "Arial", sans-serif; 
+                line-height: 1.6; 
+                color: #2e3440; 
+                margin: 0; 
+                padding: 20px;
+                background-color: #f7f8fa;
+            }
+            .container { 
+                max-width: 600px; 
+                margin: 0 auto; 
+                background: white; 
+                border-radius: 12px; 
+                overflow: hidden; 
+                box-shadow: 0px 1px 3px rgba(0, 0, 0, 0.08), 0px 2px 2px rgba(0, 0, 0, 0.12);
+            }
+            .header { 
+                background: ${statusColor}; 
+                color: white; 
+                padding: 40px 30px; 
+                text-align: center; 
+            }
+            .header h1 {
+                margin: 0 0 10px 0;
+                font-size: 1.75rem;
+                font-weight: 500;
+            }
+            .header p {
+                margin: 0;
+                font-size: 1.1rem;
+                opacity: 0.9;
+            }
+            .content { 
+                padding: 40px 30px; 
+            }
+            .content h2 {
+                color: #2e3440;
+                font-size: 1.5rem;
+                font-weight: 500;
+                margin: 0 0 15px 0;
+            }
+            .content p {
+                color: #2e3440;
+                font-size: 0.875rem;
+                margin: 0 0 15px 0;
+            }
+            .content h3 {
+                color: #2e3440;
+                font-size: 1rem;
+                font-weight: 500;
+                margin: 25px 0 15px 0;
+            }
+            .status-badge { 
+                background: ${statusColor}; 
+                color: white; 
+                padding: 12px 20px; 
+                border-radius: 20px; 
+                display: inline-block; 
+                font-weight: 500;
+                font-size: 0.875rem;
+                box-shadow: 0px 2px 4px rgba(0, 0, 0, 0.15);
+            }
+            .info-row { 
+                display: flex; 
+                justify-content: space-between; 
+                padding: 12px 0; 
+                border-bottom: 1px solid #e0e4e7;
+                font-size: 0.875rem;
+            }
+            .info-row:last-child {
+                border-bottom: none;
+            }
+            .info-row span:first-child {
+                color: #5e6b73;
+            }
+            .info-row span:last-child {
+                color: #2e3440;
+                font-weight: 500;
+            }
+            .footer { 
+                background: #f7f8fa; 
+                padding: 30px; 
+                text-align: center; 
+                color: #5e6b73; 
+                font-size: 0.75rem;
+                line-height: 1.4;
+            }
+            .highlight {
+                color: ${statusColor};
+                font-weight: 500;
+            }
         </style>
     </head>
     <body>
@@ -278,32 +494,34 @@ export class EmailService {
             
             <div class="content">
                 <h2>Status atualizado!</h2>
-                <p>O pedido <strong>${orderNumber}</strong> teve seu status atualizado.</p>
+                <p>O pedido <span class="highlight">${orderNumber}</span> teve seu status atualizado.</p>
                 
-                <div style="text-align: center; margin: 20px 0;">
+                <div style="text-align: center; margin: 30px 0;">
                     <span class="status-badge">${statusMessage}</span>
                 </div>
                 
                 <h3>📋 Detalhes:</h3>
-                <div class="info-row">
-                    <span><strong>Cliente:</strong></span>
-                    <span>${customer}</span>
-                </div>
-                <div class="info-row">
-                    <span><strong>Motorista:</strong></span>
-                    <span>${driverName || 'Não informado'}</span>
-                </div>
-                <div class="info-row">
-                    <span><strong>Status anterior:</strong></span>
-                    <span>${oldStatus}</span>
-                </div>
-                <div class="info-row">
-                    <span><strong>Novo status:</strong></span>
-                    <span>${newStatus}</span>
-                </div>
-                <div class="info-row">
-                    <span><strong>Data/Hora:</strong></span>
-                    <span>${new Date().toLocaleString('pt-BR')}</span>
+                <div style="background: #f7f8fa; padding: 20px; border-radius: 8px; border-left: 4px solid ${statusColor};">
+                    <div class="info-row">
+                        <span>Cliente:</span>
+                        <span>${customer}</span>
+                    </div>
+                    <div class="info-row">
+                        <span>Motorista:</span>
+                        <span>${driverName || 'Não informado'}</span>
+                    </div>
+                    <div class="info-row">
+                        <span>Status anterior:</span>
+                        <span>${oldStatus}</span>
+                    </div>
+                    <div class="info-row">
+                        <span>Novo status:</span>
+                        <span>${newStatus}</span>
+                    </div>
+                    <div class="info-row">
+                        <span>Data/Hora:</span>
+                        <span>${new Date().toLocaleString('pt-BR')}</span>
+                    </div>
                 </div>
             </div>
             
@@ -329,11 +547,38 @@ export class EmailService {
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>Roteiro Finalizado</title>
         <style>
-            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 20px; }
-            .container { max-width: 600px; margin: 0 auto; background: white; border-radius: 10px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-            .header { background: #28a745; color: white; padding: 30px; text-align: center; }
-            .content { padding: 30px; }
-            .footer { background: #f8f9fa; padding: 20px; text-align: center; color: #666; font-size: 12px; }
+            body { 
+                font-family: "Inter", "Roboto", "Helvetica", "Arial", sans-serif; 
+                line-height: 1.6; 
+                color: #2e3440; 
+                margin: 0; 
+                padding: 20px;
+                background-color: #f7f8fa;
+            }
+            .container { 
+                max-width: 600px; 
+                margin: 0 auto; 
+                background: white; 
+                border-radius: 12px; 
+                overflow: hidden; 
+                box-shadow: 0px 1px 3px rgba(0, 0, 0, 0.08), 0px 2px 2px rgba(0, 0, 0, 0.12);
+            }
+            .header { 
+                background: #2e7d32; 
+                color: white; 
+                padding: 40px 30px; 
+                text-align: center; 
+            }
+            .content { 
+                padding: 40px 30px; 
+            }
+            .footer { 
+                background: #f7f8fa; 
+                padding: 30px; 
+                text-align: center; 
+                color: #5e6b73; 
+                font-size: 0.75rem;
+            }
         </style>
     </head>
     <body>
@@ -373,11 +618,38 @@ export class EmailService {
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>Roteiro Aprovado</title>
         <style>
-            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 20px; }
-            .container { max-width: 600px; margin: 0 auto; background: white; border-radius: 10px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-            .header { background: #007bff; color: white; padding: 30px; text-align: center; }
-            .content { padding: 30px; }
-            .footer { background: #f8f9fa; padding: 20px; text-align: center; color: #666; font-size: 12px; }
+            body { 
+                font-family: "Inter", "Roboto", "Helvetica", "Arial", sans-serif; 
+                line-height: 1.6; 
+                color: #2e3440; 
+                margin: 0; 
+                padding: 20px;
+                background-color: #f7f8fa;
+            }
+            .container { 
+                max-width: 600px; 
+                margin: 0 auto; 
+                background: white; 
+                border-radius: 12px; 
+                overflow: hidden; 
+                box-shadow: 0px 1px 3px rgba(0, 0, 0, 0.08), 0px 2px 2px rgba(0, 0, 0, 0.12);
+            }
+            .header { 
+                background: #0288d1; 
+                color: white; 
+                padding: 40px 30px; 
+                text-align: center; 
+            }
+            .content { 
+                padding: 40px 30px; 
+            }
+            .footer { 
+                background: #f7f8fa; 
+                padding: 30px; 
+                text-align: center; 
+                color: #5e6b73; 
+                font-size: 0.75rem;
+            }
         </style>
     </head>
     <body>
@@ -417,12 +689,50 @@ export class EmailService {
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>Roteiro Rejeitado</title>
         <style>
-            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 20px; }
-            .container { max-width: 600px; margin: 0 auto; background: white; border-radius: 10px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-            .header { background: #dc3545; color: white; padding: 30px; text-align: center; }
-            .content { padding: 30px; }
-            .reason-box { background: #fff3cd; border: 1px solid #ffeaa7; padding: 15px; border-radius: 5px; margin: 20px 0; }
-            .footer { background: #f8f9fa; padding: 20px; text-align: center; color: #666; font-size: 12px; }
+            body { 
+                font-family: "Inter", "Roboto", "Helvetica", "Arial", sans-serif; 
+                line-height: 1.6; 
+                color: #2e3440; 
+                margin: 0; 
+                padding: 20px;
+                background-color: #f7f8fa;
+            }
+            .container { 
+                max-width: 600px; 
+                margin: 0 auto; 
+                background: white; 
+                border-radius: 12px; 
+                overflow: hidden; 
+                box-shadow: 0px 1px 3px rgba(0, 0, 0, 0.08), 0px 2px 2px rgba(0, 0, 0, 0.12);
+            }
+            .header { 
+                background: #d32f2f; 
+                color: white; 
+                padding: 40px 30px; 
+                text-align: center; 
+            }
+            .content { 
+                padding: 40px 30px; 
+            }
+            .reason-box { 
+                background: rgba(237, 108, 2, 0.1); 
+                border: 1px solid rgba(237, 108, 2, 0.2); 
+                color: #e65100;
+                padding: 20px; 
+                border-radius: 8px; 
+                margin: 25px 0; 
+            }
+            .reason-box h3 {
+                color: #ed6c02;
+                margin: 0 0 10px 0;
+            }
+            .footer { 
+                background: #f7f8fa; 
+                padding: 30px; 
+                text-align: center; 
+                color: #5e6b73; 
+                font-size: 0.75rem;
+            }
         </style>
     </head>
     <body>
@@ -471,11 +781,55 @@ export class EmailService {
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>Notificação do Sistema</title>
         <style>
-            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 20px; }
-            .container { max-width: 600px; margin: 0 auto; background: white; border-radius: 10px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-            .header { background: #667eea; color: white; padding: 30px; text-align: center; }
-            .content { padding: 30px; }
-            .footer { background: #f8f9fa; padding: 20px; text-align: center; color: #666; font-size: 12px; }
+            body { 
+                font-family: "Inter", "Roboto", "Helvetica", "Arial", sans-serif; 
+                line-height: 1.6; 
+                color: #2e3440; 
+                margin: 0; 
+                padding: 20px;
+                background-color: #f7f8fa;
+            }
+            .container { 
+                max-width: 600px; 
+                margin: 0 auto; 
+                background: white; 
+                border-radius: 12px; 
+                overflow: hidden; 
+                box-shadow: 0px 1px 3px rgba(0, 0, 0, 0.08), 0px 2px 2px rgba(0, 0, 0, 0.12);
+            }
+            .header { 
+                background: linear-gradient(135deg, #00695c 0%, #004c40 100%); 
+                color: white; 
+                padding: 40px 30px; 
+                text-align: center; 
+            }
+            .header h1 {
+                margin: 0 0 10px 0;
+                font-size: 1.75rem;
+                font-weight: 500;
+            }
+            .content { 
+                padding: 40px 30px; 
+            }
+            .content h2 {
+                color: #2e3440;
+                font-size: 1.5rem;
+                font-weight: 500;
+                margin: 0 0 15px 0;
+            }
+            .content p {
+                color: #2e3440;
+                font-size: 0.875rem;
+                margin: 0 0 15px 0;
+            }
+            .footer { 
+                background: #f7f8fa; 
+                padding: 30px; 
+                text-align: center; 
+                color: #5e6b73; 
+                font-size: 0.75rem;
+                line-height: 1.4;
+            }
         </style>
     </head>
     <body>
@@ -493,6 +847,7 @@ export class EmailService {
             
             <div class="footer">
                 <p>Sistema de Gestão de Entregas - Notificação Automática</p>
+                <p>© 2024 Sistema de Gestão. Todos os direitos reservados.</p>
             </div>
         </div>
     </body>
