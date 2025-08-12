@@ -35,7 +35,7 @@ import { InvitesModule } from './invites/invites.module';
     }),
 
     InfrastructureModule,
-
+    InvitesModule,
     PrismaModule,
     OrdersModule,
     StatisticsModule,
@@ -54,7 +54,6 @@ import { InvitesModule } from './invites/invites.module';
     MobileModule,
     RoutesModule,
     NotificationsModule,
-    InvitesModule,
   ],
   controllers: [],
   providers: [],

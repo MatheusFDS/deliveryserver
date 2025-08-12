@@ -422,6 +422,5 @@ model UserInvite {
   inviter   User     @relation("UserInvites", fields: [invitedBy], references: [id])
 
   @@unique([email, tenantId, status])
-  @@map("user_invites")
 }
 

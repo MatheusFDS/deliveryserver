@@ -88,6 +88,7 @@ async function main() {
         roleId: superAdminRole.id,
         tenantId: null,
         isActive: true,
+        firebaseUid: 'HC0XoMohmrSYd4v2AOry1jY6Rs83', // firebaseUid fixo aqui
       },
     });
     console.log('Usuário Super Admin criado:', superAdminUser);
@@ -109,11 +110,11 @@ async function main() {
         email: saEmail,
         tenantId: null,
         roleId: superAdminRole.id,
-        status: 'PENDING',
+        status: 'ACCEPTED',
         expiresAt: new Date(
           new Date().setFullYear(new Date().getFullYear() + 1),
         ), // 1 ano de validade
-        invitedBy: 'system', // ou id válido de usuário que criou o convite
+        invitedBy: superAdminUser.id,
       },
     });
     console.log('Convite para Super Admin criado:', invite);
