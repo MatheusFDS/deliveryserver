@@ -6,7 +6,7 @@ import {
   WebSocketServer,
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
-import * as jwt from 'jsonwebtoken';
+import * as admin from 'firebase-admin';
 
 @WebSocketGateway({
   namespace: '/',
@@ -25,10 +25,7 @@ export class NotificationGateway
 
   async handleConnection(client: Socket) {
     try {
-      const token =
-        client.handshake.auth?.token ||
-        client.handshake.headers?.authorization?.replace('Bearer ', '') ||
-        client.handshake.query?.token;
+      const token = client.handshake.auth?.token;
 
       if (!token) {
         client.emit('error', { message: 'Token de autenticação necessário' });
@@ -36,36 +33,25 @@ export class NotificationGateway
         return;
       }
 
-      let decoded: any;
       try {
-        decoded = jwt.verify(token, process.env.JWT_SECRET || 'sua_chave_aqui');
-      } catch (jwtError) {
-        client.emit('error', { message: 'Token inválido' });
+        const decodedToken = await admin.auth().verifyIdToken(token);
+        const userId = decodedToken.uid; // O ID do usuário no Firebase é 'uid'
+
+        if (!this.connectedUsers.has(userId)) {
+          this.connectedUsers.set(userId, new Set());
+        }
+        this.connectedUsers.get(userId)!.add(client.id);
+
+        client.data.userId = userId;
+        client.emit('connected', { message: 'Conectado com sucesso' });
+      } catch (error) {
+        // O erro pode ser de token inválido, expirado, etc.
+        client.emit('error', {
+          message: 'Autenticação falhou: Token inválido',
+        });
         client.disconnect();
         return;
       }
-
-      const userId = decoded?.sub || decoded?.userId;
-
-      if (!userId) {
-        client.emit('error', { message: 'Token não contém ID do usuário' });
-        client.disconnect();
-        return;
-      }
-
-      if (!this.connectedUsers.has(userId)) {
-        this.connectedUsers.set(userId, new Set());
-      }
-      this.connectedUsers.get(userId)!.add(client.id);
-
-      client.data.userId = userId;
-      client.data.connectedAt = new Date();
-
-      client.emit('connected', {
-        message: 'Conectado com sucesso',
-        userId,
-        socketId: client.id,
-      });
     } catch (err) {
       client.emit('error', { message: 'Erro interno do servidor' });
       client.disconnect();
