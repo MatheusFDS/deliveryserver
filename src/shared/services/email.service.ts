@@ -1,4 +1,3 @@
-// Service de envio de e-mails (SendGrid)
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as sgMail from '@sendgrid/mail';
@@ -32,7 +31,7 @@ export class EmailService {
       params;
 
     const frontendUrl = this.configService.get<string>('FRONTEND_URL');
-    const acceptUrl = `${frontendUrl}/convite/${inviteToken}`;
+    const acceptUrl = `${frontendUrl}/aceitar/${inviteToken}`;
 
     const subject = tenantName
       ? `Convite para ${tenantName} - Sistema de Gestão`
