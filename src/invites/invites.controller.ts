@@ -10,13 +10,14 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { InviteStatus } from '@prisma/client';
+import * as admin from 'firebase-admin';
 import * as bcrypt from 'bcrypt';
 
 interface AcceptInviteDto {
-  firebaseUid: string;
+  firebaseUid?: string;
   name: string;
   email: string;
-  password?: string; // 👈 Adicionar campo opcional para senha
+  password?: string;
 }
 
 @Controller('invites')
@@ -52,7 +53,6 @@ export class InvitesController {
       throw new BadRequestException('Convite expirado.');
     }
 
-    // Verificar se já existe usuário com este email
     const existingUser = await this.prisma.user.findFirst({
       where: {
         email: invite.email,
@@ -111,20 +111,6 @@ export class InvitesController {
       throw new BadRequestException('Email não corresponde ao convite.');
     }
 
-    // Verificar se já existe usuário com este firebaseUid (se fornecido)
-    if (acceptDto.firebaseUid) {
-      const existingUserByUid = await this.prisma.user.findUnique({
-        where: { firebaseUid: acceptDto.firebaseUid },
-      });
-
-      if (existingUserByUid) {
-        throw new BadRequestException(
-          'Esta conta já está associada a outro usuário.',
-        );
-      }
-    }
-
-    // Verificar se já existe usuário com este email no tenant
     const existingUserByEmail = await this.prisma.user.findFirst({
       where: {
         email: acceptDto.email,
@@ -138,34 +124,61 @@ export class InvitesController {
       );
     }
 
-    // Validar senha se fornecida
-    if (acceptDto.password && acceptDto.password.length < 6) {
+    if (!acceptDto.password || acceptDto.password.length < 6) {
       throw new BadRequestException('A senha deve ter no mínimo 6 caracteres.');
     }
 
-    // Criar usuário e marcar convite como aceito
-    const user = await this.prisma.$transaction(async (tx) => {
-      // Preparar dados do usuário
-      const userData: any = {
+    let firebaseUid: string;
+
+    try {
+      const firebaseUser = await admin.auth().createUser({
         email: acceptDto.email,
-        name: acceptDto.name,
-        tenantId: invite.tenantId,
-        roleId: invite.roleId,
-        isActive: true,
-      };
+        password: acceptDto.password,
+        displayName: acceptDto.name,
+        emailVerified: true,
+      });
 
-      // Adicionar firebaseUid se fornecido (pode ser null)
-      if (acceptDto.firebaseUid) {
-        userData.firebaseUid = acceptDto.firebaseUid;
+      firebaseUid = firebaseUser.uid;
+    } catch (firebaseError) {
+      if (firebaseError.code === 'auth/email-already-exists') {
+        try {
+          const existingFirebaseUser = await admin
+            .auth()
+            .getUserByEmail(acceptDto.email);
+          firebaseUid = existingFirebaseUser.uid;
+        } catch (getUserError) {
+          throw new BadRequestException(
+            'Erro ao processar conta no Firebase. Tente novamente.',
+          );
+        }
+      } else {
+        throw new BadRequestException(
+          `Erro ao criar conta: ${firebaseError.message}`,
+        );
       }
+    }
 
-      // Adicionar senha hasheada se fornecida
-      if (acceptDto.password) {
-        userData.password = await bcrypt.hash(acceptDto.password, 10);
-      }
+    const existingUserByUid = await this.prisma.user.findUnique({
+      where: { firebaseUid },
+    });
 
+    if (existingUserByUid) {
+      throw new BadRequestException(
+        'Esta conta já está associada a outro usuário.',
+      );
+    }
+
+    const user = await this.prisma.$transaction(async (tx) => {
       const createdUser = await tx.user.create({
-        data: userData,
+        data: {
+          firebaseUid,
+          email: acceptDto.email,
+          name: acceptDto.name,
+          password: await bcrypt.hash(acceptDto.password, 10),
+          tenantId: invite.tenantId,
+          roleId: invite.roleId,
+          isActive: true,
+        },
         include: {
           role: { select: { name: true } },
           tenant: { select: { name: true } },
@@ -186,6 +199,7 @@ export class InvitesController {
         id: user.id,
         email: user.email,
         name: user.name,
+        firebaseUid,
         role: user.role,
         tenant: user.tenant,
       },

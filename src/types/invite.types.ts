@@ -47,7 +47,7 @@ export interface InviteDetails {
 }
 
 export interface AcceptInviteDto {
-  firebaseUid: string;
+  firebaseUid?: string;
   name: string;
   email: string;
   password?: string;
