@@ -45,12 +45,11 @@ enum PaymentStatus {
   BAIXADO
   CANCELADO
 }
-
-// NOVO ENUM
 enum InviteStatus {
   PENDING
   ACCEPTED
   EXPIRED
+  CANCELLED
 }
 
 // =================================================================
@@ -77,6 +76,8 @@ model User {
   approvals      Approval[]
   orderHistories OrderHistory[]
   notifications  Notification[]
+
+  UserInvite UserInvite[] @relation("UserInvites")
 }
 
 model Role {
@@ -406,19 +407,21 @@ model Notification {
 }
 
 model UserInvite {
-  id          String       @id @default(uuid())
-  email       String       // Email do convidado
-  tenantId    String?      // MUDANÇA: String? para permitir null (super admin)
-  roleId      String       // Role que será atribuída
-  status      InviteStatus @default(PENDING)
-  expiresAt   DateTime     // Data de expiração do convite
-  invitedBy   String       // ID do usuário que convidou
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
+  id        String      @id @default(uuid())
+  email     String
+  roleId    String
+  tenantId  String?
+  invitedBy String
+  status    InviteStatus @default(PENDING)
+  expiresAt DateTime
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
 
-  tenant      Tenant?      @relation(fields: [tenantId], references: [id]) // MUDANÇA: Tenant? 
-  role        Role         @relation(fields: [roleId], references: [id])
-  
-  @@unique([email, tenantId]) // Mantém a unicidade
-  @@index([email])
+  role      Role     @relation(fields: [roleId], references: [id])
+  tenant    Tenant?  @relation(fields: [tenantId], references: [id])
+  inviter   User     @relation("UserInvites", fields: [invitedBy], references: [id])
+
+  @@unique([email, tenantId, status])
+  @@map("user_invites")
 }
+

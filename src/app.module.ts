@@ -26,6 +26,7 @@ import { PlatformAdminModule } from './platform-admin/platform-admin.module';
 import { MobileModule } from './mobile/mobile.module';
 import { RoutesModule } from './routes/routes.module';
 import { NotificationsModule } from './notifications/notifications.module';
+import { InvitesModule } from './invites/invites.module';
 
 @Module({
   imports: [
@@ -53,6 +54,7 @@ import { NotificationsModule } from './notifications/notifications.module';
     MobileModule,
     RoutesModule,
     NotificationsModule,
+    InvitesModule,
   ],
   controllers: [],
   providers: [],

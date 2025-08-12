@@ -1,18 +1,18 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import {
   INotificationProvider,
   NotificationPayload,
 } from './notification.interface';
 import { NotificationGateway } from './notification.gateway';
 import { NotificationsService } from '../../notifications/notifications.service';
+import { EmailService } from '../../shared/services/email.service';
 
 @Injectable()
 export class RealtimeNotificationProvider implements INotificationProvider {
-  private readonly logger = new Logger(RealtimeNotificationProvider.name);
-
   constructor(
     private readonly notificationGateway: NotificationGateway,
     private readonly notificationsService: NotificationsService,
+    private readonly emailService: EmailService,
   ) {}
 
   async send(payload: NotificationPayload): Promise<void> {
@@ -28,10 +28,7 @@ export class RealtimeNotificationProvider implements INotificationProvider {
           linkTo: this.generateLinkTo(templateId, data),
         });
       } catch (error) {
-        this.logger.error(
-          'Falha ao salvar a notificação no banco de dados.',
-          error,
-        );
+        // Silent error handling for database notification
       }
     }
 
@@ -47,13 +44,30 @@ export class RealtimeNotificationProvider implements INotificationProvider {
           }
           break;
         case 'sms':
-          this.logger.log(`[SIMULAÇÃO] Enviando SMS para ${recipient.phone}`);
+          // SMS implementation would go here
           break;
         case 'email':
-          this.logger.log(`[SIMULAÇÃO] Enviando Email para ${recipient.email}`);
+          if (recipient.email) {
+            try {
+              if (templateId.startsWith('invite-')) {
+                // Handle invite emails separately if needed
+                // This would be called from the invite process directly
+              } else {
+                // Handle status/notification emails
+                await this.emailService.sendStatusEmail({
+                  email: recipient.email,
+                  templateId,
+                  data,
+                });
+              }
+            } catch (error) {
+              // Silent error handling for email
+            }
+          }
           break;
         default:
-          this.logger.warn(`Canal de notificação '${channel}' não suportado.`);
+          // Unknown channel
+          break;
       }
     }
   }

@@ -1,8 +1,7 @@
-// src/infrastructure/infrastructure.module.ts
-
 import { Global, Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { EmailService } from '../shared/services/email.service';
 
 // Cache
 import { CACHE_SERVICE } from './cache/cache.interface';
@@ -40,15 +39,13 @@ import { FailoverStorageProvider } from './storage/failover-storage.provider';
     { provide: AUDIT_PROVIDER, useClass: ConsoleAuditProvider },
     LocalStorageProvider,
     CloudinaryStorageProvider,
-
     FailoverStorageProvider,
-
     {
       provide: STORAGE_PROVIDER,
       useClass: FailoverStorageProvider,
     },
-
     NotificationGateway,
+    EmailService,
   ],
   exports: [
     CACHE_SERVICE,
@@ -57,6 +54,7 @@ import { FailoverStorageProvider } from './storage/failover-storage.provider';
     NOTIFICATION_PROVIDER,
     AUDIT_PROVIDER,
     STORAGE_PROVIDER,
+    EmailService,
   ],
 })
 export class InfrastructureModule {}

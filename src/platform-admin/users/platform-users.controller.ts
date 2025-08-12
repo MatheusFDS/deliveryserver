@@ -17,11 +17,13 @@ import { UsersService } from '../../users/users.service';
 import { CreateUserDto } from '../../users/dto/create-user.dto';
 import { UpdateUserDto } from '../../users/dto/update-user.dto';
 import { InviteUserDto } from '../../users/dto/invite-user.dto';
+import { EmailService } from '../../shared/services/email.service';
 import { JwtAuthGuard } from '../../auth/jwt-auth.guard';
 import { RolesGuard } from '../../auth/roles.guard';
 import { Roles } from '../../auth/roles.decorator';
 import { Request } from 'express';
 import { PrismaService } from '../../prisma/prisma.service';
+import { addDays } from 'date-fns';
 
 @Controller('platform-admin/users')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -30,6 +32,7 @@ export class PlatformUsersController {
   constructor(
     private readonly usersService: UsersService,
     private readonly prisma: PrismaService,
+    private readonly emailService: EmailService,
   ) {}
 
   @Post('invite')
@@ -40,6 +43,12 @@ export class PlatformUsersController {
   ) {
     const requestingUserId = (req.user as any).userId;
 
+    // Buscar dados do usuário que está convidando
+    const requestingUser = await this.prisma.user.findUnique({
+      where: { id: requestingUserId },
+      select: { name: true },
+    });
+
     const targetRole = await this.prisma.role.findUnique({
       where: { id: inviteUserDto.roleId },
     });
@@ -49,23 +58,32 @@ export class PlatformUsersController {
     }
 
     let finalTenantId: string | null = null;
+    let tenantName: string | undefined = undefined;
 
     if (targetRole.isPlatformRole) {
       finalTenantId = null;
     } else {
       if (tenantId) {
+        const tenant = await this.prisma.tenant.findUnique({
+          where: { id: tenantId },
+          select: { name: true },
+        });
         finalTenantId = tenantId;
+        tenantName = tenant?.name;
       } else {
         const firstTenant = await this.prisma.tenant.findFirst({
           where: { isActive: true },
+          select: { id: true, name: true },
         });
         if (!firstTenant) {
           throw new Error('Nenhum tenant ativo encontrado.');
         }
         finalTenantId = firstTenant.id;
+        tenantName = firstTenant.name;
       }
     }
 
+    const expiresAt = addDays(new Date(), 7);
     const result = await this.prisma.userInvite.create({
       data: {
         email: inviteUserDto.email,
@@ -73,7 +91,7 @@ export class PlatformUsersController {
         tenantId: finalTenantId,
         invitedBy: requestingUserId,
         status: 'PENDING',
-        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+        expiresAt,
       },
       include: {
         role: true,
@@ -81,10 +99,28 @@ export class PlatformUsersController {
       },
     });
 
-    return {
-      message: 'Convite enviado com sucesso!',
-      invite: result,
-    };
+    // Enviar email de convite
+    try {
+      await this.emailService.sendInviteEmail({
+        email: inviteUserDto.email,
+        inviterName: requestingUser?.name || 'Administrador',
+        roleName: targetRole.name,
+        tenantName,
+        inviteToken: result.id,
+        expiresAt,
+      });
+
+      return {
+        message: 'Convite enviado com sucesso!',
+        invite: result,
+      };
+    } catch (emailError) {
+      return {
+        message: 'Convite criado, mas houve erro no envio do email.',
+        invite: result,
+        emailError: true,
+      };
+    }
   }
 
   @Post('platform-admin')

@@ -35,6 +35,7 @@
     "@nestjs/throttler": "^6.4.0",
     "@nestjs/websockets": "^11.1.6",
     "@prisma/client": "^5.16.1",
+    "@sendgrid/mail": "^8.1.5",
     "axios": "^1.10.0",
     "backend": "file:",
     "bcrypt": "^5.1.1",

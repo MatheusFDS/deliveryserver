@@ -96,12 +96,10 @@ async function main() {
   }
 
   // 3. Criar convite para o Super Admin (se não existir)
-  const existingInvite = await prisma.userInvite.findUnique({
+  const existingInvite = await prisma.userInvite.findFirst({
     where: {
-      email_tenantId: {
-        email: saEmail,
-        tenantId: null,
-      },
+      email: saEmail,
+      tenantId: null,
     },
   });
 

@@ -11,13 +11,17 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { InviteUserDto } from './dto/invite-user.dto';
+import { EmailService } from '../shared/services/email.service';
 import * as bcrypt from 'bcrypt';
 import { Prisma, InviteStatus } from '@prisma/client';
 import { addDays } from 'date-fns';
 
 @Injectable()
 export class UsersService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private emailService: EmailService,
+  ) {}
 
   private async getTenantIdFromUserId(userId: string): Promise<string> {
     const user = await this.prisma.user.findUnique({
@@ -34,15 +38,19 @@ export class UsersService {
     requestingUserId: string,
   ): Promise<{
     id: string;
+    name: string;
     role: { name: string; isPlatformRole: boolean };
     tenantId: string | null;
+    tenant?: { name: string } | null;
   }> {
     const user = await this.prisma.user.findUnique({
       where: { id: requestingUserId },
       select: {
         id: true,
+        name: true,
         role: { select: { name: true, isPlatformRole: true } },
         tenantId: true,
+        tenant: { select: { name: true } },
       },
     });
     if (!user) {
@@ -95,6 +103,7 @@ export class UsersService {
     }
 
     try {
+      const expiresAt = addDays(new Date(), 7);
       const invite = await this.prisma.userInvite.create({
         data: {
           email,
@@ -102,9 +111,32 @@ export class UsersService {
           tenantId,
           invitedBy: requestingUserId,
           status: InviteStatus.PENDING,
-          expiresAt: addDays(new Date(), 7),
+          expiresAt,
+        },
+        include: {
+          role: true,
+          tenant: true,
         },
       });
+
+      // Enviar email de convite
+      try {
+        await this.emailService.sendInviteEmail({
+          email,
+          inviterName: requestingUser.name,
+          roleName: targetRole.name,
+          tenantName: requestingUser.tenant?.name,
+          inviteToken: invite.id,
+          expiresAt,
+        });
+      } catch (emailError) {
+        // Se falhar o email, ainda retorna sucesso mas avisa
+        return {
+          message: 'Convite criado, mas houve erro no envio do email.',
+          invite,
+          emailError: true,
+        };
+      }
 
       return {
         message: 'Convite enviado com sucesso!',

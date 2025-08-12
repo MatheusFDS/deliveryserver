@@ -10,6 +10,9 @@ import { RolesModule } from '../roles/roles.module';
 import { PlatformUsersController } from './users/platform-users.controller';
 import { PlatformTenantsController } from './tenants/platform-tenants.controller';
 import { PlatformRolesController } from './roles/platform-roles.controller';
+import { PrismaService } from 'src/prisma/prisma.service';
+import { UsersService } from 'src/users/users.service';
+import { EmailService } from 'src/shared/services/email.service';
 
 @Module({
   imports: [
@@ -24,5 +27,6 @@ import { PlatformRolesController } from './roles/platform-roles.controller';
     PlatformTenantsController,
     PlatformRolesController,
   ],
+  providers: [UsersService, PrismaService, EmailService],
 })
 export class PlatformAdminModule {}
