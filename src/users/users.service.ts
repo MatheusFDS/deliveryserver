@@ -75,6 +75,17 @@ export class UsersService {
 
     const { email, roleId } = inviteUserDto;
 
+    // *** VALIDAÇÃO ADICIONADA AQUI ***
+    // Verifica se o email já existe em toda a tabela de usuários (User)
+    const emailAlreadyExistsInUsers = await this.prisma.user.findUnique({
+      where: { email },
+    });
+    if (emailAlreadyExistsInUsers) {
+      throw new ConflictException(
+        'Um usuário com este e-mail já existe na plataforma. Se for a mesma pessoa, ela não pode ser convidada novamente.',
+      );
+    }
+
     const existingUser = await this.prisma.user.findFirst({
       where: { email, tenantId },
     });
@@ -119,7 +130,6 @@ export class UsersService {
         },
       });
 
-      // Enviar email de convite
       try {
         await this.emailService.sendInviteEmail({
           email,
@@ -130,7 +140,6 @@ export class UsersService {
           expiresAt,
         });
       } catch (emailError) {
-        // Se falhar o email, ainda retorna sucesso mas avisa
         return {
           message: 'Convite criado, mas houve erro no envio do email.',
           invite,
