@@ -20,13 +20,21 @@ export class RealtimeNotificationProvider implements INotificationProvider {
 
     if (recipient.userId && data.tenantId) {
       try {
-        await this.notificationsService.create({
+        const newNotification = await this.notificationsService.create({
           userId: recipient.userId,
           tenantId: data.tenantId,
           type: templateId,
           message: this.generateMessage(templateId, data),
           linkTo: this.generateLinkTo(templateId, data),
         });
+
+        if (newNotification) {
+          this.notificationGateway.sendToUser(
+            recipient.userId,
+            'new_notification',
+            newNotification,
+          );
+        }
       } catch (error) {
         // Silent error handling for database notification
       }
@@ -35,13 +43,6 @@ export class RealtimeNotificationProvider implements INotificationProvider {
     for (const channel of channels) {
       switch (channel) {
         case 'push':
-          if (recipient.userId) {
-            this.notificationGateway.sendToUser(
-              recipient.userId,
-              templateId,
-              data,
-            );
-          }
           break;
         case 'sms':
           // SMS implementation would go here
@@ -51,9 +52,7 @@ export class RealtimeNotificationProvider implements INotificationProvider {
             try {
               if (templateId.startsWith('invite-')) {
                 // Handle invite emails separately if needed
-                // This would be called from the invite process directly
               } else {
-                // Handle status/notification emails
                 await this.emailService.sendStatusEmail({
                   email: recipient.email,
                   templateId,
