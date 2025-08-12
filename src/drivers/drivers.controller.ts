@@ -30,14 +30,14 @@ export class DriversController {
   constructor(private readonly driversService: DriversService) {}
 
   @Post()
-  @Roles('admin')
+  @Roles('admin', 'user')
   create(@Body() createDriverDto: CreateDriverDto, @Req() req: Request) {
     const userId = (req.user as any).userId;
     return this.driversService.create(createDriverDto, userId);
   }
 
   @Get()
-  @Roles('admin')
+  @Roles('admin', 'user')
   findAll(
     @Req() req: Request,
     @Query('search') search?: string,
