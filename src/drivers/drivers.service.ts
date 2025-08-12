@@ -9,8 +9,8 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateDriverDto } from './dto/create-driver.dto';
 import { UpdateDriverDto } from './dto/update-driver.dto';
-// CORREÇÃO: Importar Enums e tipos do Prisma Client
 import { Prisma, OrderStatus } from '@prisma/client';
+import { CompleteDriverProfileDto } from './dto/complete-driver-profile.dto';
 
 @Injectable()
 export class DriversService {
@@ -40,6 +40,49 @@ export class DriversService {
       );
     }
     return driver;
+  }
+
+  async createProfileForUser(
+    userId: string,
+    profileData: CompleteDriverProfileDto,
+  ) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      include: { driver: true, tenant: true }, // Incluir o driver e o tenant
+    });
+
+    if (!user) {
+      throw new UnauthorizedException('Usuário não encontrado.');
+    }
+    if (!user.tenantId || !user.tenant) {
+      throw new BadRequestException(
+        'Usuário não está associado a uma empresa.',
+      );
+    }
+    if (user.driver) {
+      throw new ConflictException(
+        'Este usuário já possui um perfil de motorista.',
+      );
+    }
+
+    // Verificar se já existe um motorista com o mesmo CPF na empresa
+    const existingDriverWithCpf = await this.prisma.driver.findFirst({
+      where: { cpf: profileData.cpf, tenantId: user.tenantId },
+    });
+    if (existingDriverWithCpf) {
+      throw new ConflictException(
+        `Já existe um motorista com o CPF "${profileData.cpf}" nesta empresa.`,
+      );
+    }
+
+    // Cria o perfil do motorista e liga-o ao usuário existente
+    return this.prisma.driver.create({
+      data: {
+        ...profileData,
+        tenantId: user.tenantId,
+        userId: userId, // A associação é feita aqui
+      },
+    });
   }
 
   async create(createDriverDto: CreateDriverDto, userId: string) {
