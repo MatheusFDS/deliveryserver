@@ -10,11 +10,13 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { InviteStatus } from '@prisma/client';
+import * as bcrypt from 'bcrypt';
 
 interface AcceptInviteDto {
   firebaseUid: string;
   name: string;
   email: string;
+  password?: string; // 👈 Adicionar campo opcional para senha
 }
 
 @Controller('invites')
@@ -109,15 +111,17 @@ export class InvitesController {
       throw new BadRequestException('Email não corresponde ao convite.');
     }
 
-    // Verificar se já existe usuário com este firebaseUid
-    const existingUserByUid = await this.prisma.user.findUnique({
-      where: { firebaseUid: acceptDto.firebaseUid },
-    });
+    // Verificar se já existe usuário com este firebaseUid (se fornecido)
+    if (acceptDto.firebaseUid) {
+      const existingUserByUid = await this.prisma.user.findUnique({
+        where: { firebaseUid: acceptDto.firebaseUid },
+      });
 
-    if (existingUserByUid) {
-      throw new BadRequestException(
-        'Esta conta já está associada a outro usuário.',
-      );
+      if (existingUserByUid) {
+        throw new BadRequestException(
+          'Esta conta já está associada a outro usuário.',
+        );
+      }
     }
 
     // Verificar se já existe usuário com este email no tenant
@@ -134,17 +138,34 @@ export class InvitesController {
       );
     }
 
+    // Validar senha se fornecida
+    if (acceptDto.password && acceptDto.password.length < 6) {
+      throw new BadRequestException('A senha deve ter no mínimo 6 caracteres.');
+    }
+
     // Criar usuário e marcar convite como aceito
     const user = await this.prisma.$transaction(async (tx) => {
+      // Preparar dados do usuário
+      const userData: any = {
+        email: acceptDto.email,
+        name: acceptDto.name,
+        tenantId: invite.tenantId,
+        roleId: invite.roleId,
+        isActive: true,
+      };
+
+      // Adicionar firebaseUid se fornecido (pode ser null)
+      if (acceptDto.firebaseUid) {
+        userData.firebaseUid = acceptDto.firebaseUid;
+      }
+
+      // Adicionar senha hasheada se fornecida
+      if (acceptDto.password) {
+        userData.password = await bcrypt.hash(acceptDto.password, 10);
+      }
+
       const createdUser = await tx.user.create({
-        data: {
-          firebaseUid: acceptDto.firebaseUid,
-          email: acceptDto.email,
-          name: acceptDto.name,
-          tenantId: invite.tenantId,
-          roleId: invite.roleId,
-          isActive: true,
-        },
+        data: userData,
         include: {
           role: { select: { name: true } },
           tenant: { select: { name: true } },
