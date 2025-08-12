@@ -11,7 +11,6 @@ import {
   Query,
   DefaultValuePipe,
   ParseIntPipe,
-  Logger,
 } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { InviteUserDto } from './dto/invite-user.dto';
@@ -24,8 +23,6 @@ import { Request } from 'express';
 @Controller('users')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class UsersController {
-  private readonly logger = new Logger(UsersController.name);
-
   constructor(private readonly usersService: UsersService) {}
 
   @Get('me')
@@ -34,35 +31,14 @@ export class UsersController {
     return this.usersService.findOneById(userId);
   }
 
-  // ENDPOINT DE DEBUG - REMOVER APÓS TESTES
-  @Get('debug')
-  async debugUser(@Req() req: Request) {
-    this.logger.debug(
-      `🐛 Debug users - Usuario: ${JSON.stringify(req.user as any)}`,
-    );
-    return {
-      user: req.user,
-      timestamp: new Date().toISOString(),
-      message: 'Debug endpoint funcionando!',
-    };
-  }
-
   @Post()
-  @Roles('admin') // superadmin vai passar por causa do RolesGuard atualizado
+  @Roles('admin')
   async invite(@Body() inviteUserDto: InviteUserDto, @Req() req: Request) {
-    this.logger.debug(
-      `📧 Tentativa de convite por: ${JSON.stringify(req.user as any)}`,
-    );
-    this.logger.debug(`👤 Role do usuário: ${(req.user as any)?.role}`);
-    this.logger.debug(`📝 Dados do convite: ${JSON.stringify(inviteUserDto)}`);
-
     const requestingUserId = (req.user as any).userId;
     const result = await this.usersService.inviteUserForTenant(
       inviteUserDto,
       requestingUserId,
     );
-
-    this.logger.debug(`✅ Convite criado com sucesso`);
     return result;
   }
 

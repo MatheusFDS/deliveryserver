@@ -12,7 +12,6 @@ import {
   Req,
   DefaultValuePipe,
   ParseIntPipe,
-  Logger,
 } from '@nestjs/common';
 import { UsersService } from '../../users/users.service';
 import { CreateUserDto } from '../../users/dto/create-user.dto';
@@ -28,8 +27,6 @@ import { PrismaService } from '../../prisma/prisma.service';
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles('superadmin')
 export class PlatformUsersController {
-  private readonly logger = new Logger(PlatformUsersController.name);
-
   constructor(
     private readonly usersService: UsersService,
     private readonly prisma: PrismaService,
@@ -41,14 +38,6 @@ export class PlatformUsersController {
     @Req() req: Request,
     @Query('tenantId', new ParseUUIDPipe({ optional: true })) tenantId?: string,
   ) {
-    this.logger.debug(
-      `🎯 Platform Admin - Convite por: ${JSON.stringify(req.user as any)}`,
-    );
-    this.logger.debug(
-      `📧 Email: ${inviteUserDto.email}, Role: ${inviteUserDto.roleId}`,
-    );
-    this.logger.debug(`🏢 Tenant especificado: ${tenantId || 'NENHUM'}`);
-
     const requestingUserId = (req.user as any).userId;
 
     const targetRole = await this.prisma.role.findUnique({
@@ -62,12 +51,10 @@ export class PlatformUsersController {
     let finalTenantId: string | null = null;
 
     if (targetRole.isPlatformRole) {
-      this.logger.debug(`👑 Role de plataforma - usuário ficará sem tenant`);
       finalTenantId = null;
     } else {
       if (tenantId) {
         finalTenantId = tenantId;
-        this.logger.debug(`🏢 Usando tenant especificado: ${tenantId}`);
       } else {
         const firstTenant = await this.prisma.tenant.findFirst({
           where: { isActive: true },
@@ -76,7 +63,6 @@ export class PlatformUsersController {
           throw new Error('Nenhum tenant ativo encontrado.');
         }
         finalTenantId = firstTenant.id;
-        this.logger.debug(`🏢 Usando primeiro tenant ativo: ${finalTenantId}`);
       }
     }
 
@@ -94,8 +80,6 @@ export class PlatformUsersController {
         tenant: true,
       },
     });
-
-    this.logger.debug(`✅ Convite criado com sucesso: ${result.id}`);
 
     return {
       message: 'Convite enviado com sucesso!',

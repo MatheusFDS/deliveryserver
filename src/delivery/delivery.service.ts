@@ -5,7 +5,6 @@ import {
   BadRequestException,
   ForbiddenException,
   UnauthorizedException,
-  Logger,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateDeliveryDto } from './dto/create-delivery.dto';
@@ -37,8 +36,6 @@ import {
 
 @Injectable()
 export class DeliveryService {
-  private readonly logger = new Logger(DeliveryService.name);
-
   constructor(
     private readonly prisma: PrismaService,
     @Inject(FREIGHT_CALCULATOR_PROVIDER)
@@ -116,12 +113,12 @@ export class DeliveryService {
           try {
             await notifyFn();
           } catch (error) {
-            this.logger.error('Erro ao enviar notificação individual:', error);
+            // Silent error handling
           }
         });
         await Promise.allSettled(notificationPromises);
       } catch (error) {
-        this.logger.error('Erro geral ao enviar notificações:', error);
+        // Silent error handling
       }
     });
   }

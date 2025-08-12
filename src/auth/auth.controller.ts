@@ -1,18 +1,9 @@
-import {
-  Controller,
-  Post,
-  Request,
-  UseGuards,
-  Get,
-  Logger,
-} from '@nestjs/common';
+import { Controller, Post, Request, UseGuards, Get } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { JwtAuthGuard } from './jwt-auth.guard';
 
 @Controller('auth')
 export class AuthController {
-  private readonly logger = new Logger(AuthController.name);
-
   constructor(private readonly authService: AuthService) {}
 
   @UseGuards(JwtAuthGuard)
@@ -28,17 +19,5 @@ export class AuthController {
     const firebaseUid = req.user.firebaseUid;
     await this.authService.logout(firebaseUid);
     return { message: 'Sessão invalidada quando aplicável.' };
-  }
-
-  // ENDPOINT DE DEBUG - REMOVER APÓS TESTES
-  @UseGuards(JwtAuthGuard)
-  @Get('debug')
-  async debug(@Request() req) {
-    this.logger.debug(`🐛 Usuario debug: ${JSON.stringify(req.user)}`);
-    return {
-      user: req.user,
-      timestamp: new Date().toISOString(),
-      message: 'Autenticação funcionando!',
-    };
   }
 }
