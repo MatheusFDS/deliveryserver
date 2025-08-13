@@ -6,9 +6,10 @@ import { PrismaService } from '../prisma/prisma.service';
 import { EmailService } from '../shared/services/email.service';
 import { PrismaModule } from '../prisma/prisma.module';
 import { AuthModule } from 'src/auth/auth.module';
+import { DriversModule } from 'src/drivers/drivers.module'; // Adicionado
 
 @Module({
-  imports: [PrismaModule, AuthModule],
+  imports: [PrismaModule, AuthModule, DriversModule],
   controllers: [InvitesController, InvitesManagementController],
   providers: [InvitesService, PrismaService, EmailService],
   exports: [InvitesService],

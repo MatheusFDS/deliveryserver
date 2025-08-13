@@ -10,19 +10,24 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { InviteStatus } from '@prisma/client';
-import * as admin from 'firebase-admin';
 import * as bcrypt from 'bcrypt';
+import { DriversService } from 'src/drivers/drivers.service';
 
 interface AcceptInviteDto {
   firebaseUid?: string;
   name: string;
   email: string;
   password?: string;
+  cpf?: string;
+  license?: string;
 }
 
 @Controller('invites')
 export class InvitesController {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly driversService: DriversService,
+  ) {}
 
   @Get(':token')
   async getInviteDetails(@Param('token', ParseUUIDPipe) token: string) {
@@ -89,16 +94,14 @@ export class InvitesController {
       },
     });
 
-    if (!invite) {
-      throw new NotFoundException('Convite não encontrado.');
+    if (!invite || !invite.role || !invite.tenantId) {
+      throw new NotFoundException('Convite inválido ou corrompido.');
     }
-
     if (invite.status !== InviteStatus.PENDING) {
       throw new BadRequestException(
         `Convite já foi ${invite.status.toLowerCase()}.`,
       );
     }
-
     if (invite.expiresAt < new Date()) {
       await this.prisma.userInvite.update({
         where: { id: token },
@@ -106,102 +109,68 @@ export class InvitesController {
       });
       throw new BadRequestException('Convite expirado.');
     }
-
     if (invite.email !== acceptDto.email) {
       throw new BadRequestException('Email não corresponde ao convite.');
     }
-
     const existingUserByEmail = await this.prisma.user.findFirst({
       where: {
         email: acceptDto.email,
         tenantId: invite.tenantId,
       },
     });
-
     if (existingUserByEmail) {
       throw new BadRequestException(
         'Já existe um usuário com este email nesta empresa.',
       );
     }
 
-    if (!acceptDto.password || acceptDto.password.length < 6) {
-      throw new BadRequestException('A senha deve ter no mínimo 6 caracteres.');
-    }
+    let createdUser;
 
-    let firebaseUid: string;
-
-    try {
-      const firebaseUser = await admin.auth().createUser({
-        email: acceptDto.email,
-        password: acceptDto.password,
-        displayName: acceptDto.name,
-        emailVerified: true,
-      });
-
-      firebaseUid = firebaseUser.uid;
-    } catch (firebaseError) {
-      if (firebaseError.code === 'auth/email-already-exists') {
-        try {
-          const existingFirebaseUser = await admin
-            .auth()
-            .getUserByEmail(acceptDto.email);
-          firebaseUid = existingFirebaseUser.uid;
-        } catch (getUserError) {
-          throw new BadRequestException(
-            'Erro ao processar conta no Firebase. Tente novamente.',
-          );
-        }
-      } else {
+    if (invite.role.name === 'driver') {
+      createdUser = await this.driversService.createFromInvite(
+        {
+          name: acceptDto.name,
+          email: acceptDto.email,
+          password: acceptDto.password,
+          cpf: acceptDto.cpf,
+          license: acceptDto.license,
+        },
+        {
+          tenantId: invite.tenantId,
+          roleId: invite.roleId,
+        },
+      );
+    } else {
+      // Lógica original para usuários não-motoristas
+      if (!acceptDto.password || acceptDto.password.length < 6) {
         throw new BadRequestException(
-          `Erro ao criar conta: ${firebaseError.message}`,
+          'A senha deve ter no mínimo 6 caracteres.',
         );
       }
-    }
-
-    const existingUserByUid = await this.prisma.user.findUnique({
-      where: { firebaseUid },
-    });
-
-    if (existingUserByUid) {
-      throw new BadRequestException(
-        'Esta conta já está associada a outro usuário.',
-      );
-    }
-
-    const user = await this.prisma.$transaction(async (tx) => {
-      const createdUser = await tx.user.create({
+      const hashedPassword = await bcrypt.hash(acceptDto.password, 10);
+      createdUser = await this.prisma.user.create({
         data: {
-          firebaseUid,
           email: acceptDto.email,
           name: acceptDto.name,
-          password: await bcrypt.hash(acceptDto.password, 10),
+          password: hashedPassword,
           tenantId: invite.tenantId,
           roleId: invite.roleId,
           isActive: true,
         },
-        include: {
-          role: { select: { name: true } },
-          tenant: { select: { name: true } },
-        },
       });
+    }
 
-      await tx.userInvite.update({
-        where: { id: token },
-        data: { status: InviteStatus.ACCEPTED },
-      });
-
-      return createdUser;
+    await this.prisma.userInvite.update({
+      where: { id: token },
+      data: { status: InviteStatus.ACCEPTED },
     });
 
     return {
       message: 'Convite aceito com sucesso!',
       user: {
-        id: user.id,
-        email: user.email,
-        name: user.name,
-        firebaseUid,
-        role: user.role,
-        tenant: user.tenant,
+        id: createdUser.id,
+        email: createdUser.email,
+        name: createdUser.name,
       },
     };
   }

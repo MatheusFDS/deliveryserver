@@ -23,7 +23,6 @@ import { Request } from 'express';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { OrderStatus } from '@prisma/client';
 import { Roles } from 'src/auth/roles.decorator';
-import { CompleteDriverProfileDto } from './dto/complete-driver-profile.dto';
 
 @Controller('drivers')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -35,17 +34,6 @@ export class DriversController {
   create(@Body() createDriverDto: CreateDriverDto, @Req() req: Request) {
     const userId = (req.user as any).userId;
     return this.driversService.create(createDriverDto, userId);
-  }
-
-  // ADICIONAR ESTE NOVO ENDPOINT
-  @Post('complete-profile')
-  @Roles('driver') // Apenas um motorista pode chamar isto
-  completeProfile(
-    @Body() completeProfileDto: CompleteDriverProfileDto,
-    @Req() req: Request,
-  ) {
-    const userId = (req.user as any).userId;
-    return this.driversService.createProfileForUser(userId, completeProfileDto);
   }
 
   @Get()

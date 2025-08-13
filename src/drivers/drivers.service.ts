@@ -10,11 +10,58 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CreateDriverDto } from './dto/create-driver.dto';
 import { UpdateDriverDto } from './dto/update-driver.dto';
 import { Prisma, OrderStatus } from '@prisma/client';
-import { CompleteDriverProfileDto } from './dto/complete-driver-profile.dto';
+import * as bcrypt from 'bcrypt';
 
 @Injectable()
 export class DriversService {
   constructor(private prisma: PrismaService) {}
+
+  async createFromInvite(
+    profileData: {
+      name: string;
+      email: string;
+      password?: string;
+      cpf?: string;
+      license?: string;
+    },
+    invite: { tenantId: string; roleId: string },
+  ) {
+    if (!profileData.password) {
+      throw new BadRequestException('Senha é obrigatória para criar a conta.');
+    }
+    if (!profileData.cpf || !profileData.license) {
+      throw new BadRequestException(
+        'CPF e CNH são obrigatórios para motoristas.',
+      );
+    }
+
+    const passwordHash = await bcrypt.hash(profileData.password, 10);
+
+    return this.prisma.$transaction(async (tx) => {
+      const user = await tx.user.create({
+        data: {
+          email: profileData.email,
+          name: profileData.name,
+          password: passwordHash,
+          tenantId: invite.tenantId,
+          roleId: invite.roleId,
+          isActive: true,
+        },
+      });
+
+      await tx.driver.create({
+        data: {
+          name: user.name,
+          cpf: profileData.cpf,
+          license: profileData.license,
+          tenantId: invite.tenantId,
+          userId: user.id,
+        },
+      });
+
+      return user;
+    });
+  }
 
   private async getTenantIdFromUserId(userId: string): Promise<string> {
     const user = await this.prisma.user.findUnique({
@@ -40,49 +87,6 @@ export class DriversService {
       );
     }
     return driver;
-  }
-
-  async createProfileForUser(
-    userId: string,
-    profileData: CompleteDriverProfileDto,
-  ) {
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId },
-      include: { driver: true, tenant: true }, // Incluir o driver e o tenant
-    });
-
-    if (!user) {
-      throw new UnauthorizedException('Usuário não encontrado.');
-    }
-    if (!user.tenantId || !user.tenant) {
-      throw new BadRequestException(
-        'Usuário não está associado a uma empresa.',
-      );
-    }
-    if (user.driver) {
-      throw new ConflictException(
-        'Este usuário já possui um perfil de motorista.',
-      );
-    }
-
-    // Verificar se já existe um motorista com o mesmo CPF na empresa
-    const existingDriverWithCpf = await this.prisma.driver.findFirst({
-      where: { cpf: profileData.cpf, tenantId: user.tenantId },
-    });
-    if (existingDriverWithCpf) {
-      throw new ConflictException(
-        `Já existe um motorista com o CPF "${profileData.cpf}" nesta empresa.`,
-      );
-    }
-
-    // Cria o perfil do motorista e liga-o ao usuário existente
-    return this.prisma.driver.create({
-      data: {
-        ...profileData,
-        tenantId: user.tenantId,
-        userId: userId, // A associação é feita aqui
-      },
-    });
   }
 
   async create(createDriverDto: CreateDriverDto, userId: string) {
@@ -140,7 +144,6 @@ export class DriversService {
     try {
       return this.prisma.driver.create({
         data: { ...createDriverDto, tenantId },
-        // CORREÇÃO: camelCase
         include: { user: { select: { id: true, name: true, email: true } } },
       });
     } catch (error) {
@@ -169,7 +172,6 @@ export class DriversService {
         { name: { contains: search, mode: 'insensitive' } },
         { cpf: { contains: search, mode: 'insensitive' } },
         { license: { contains: search, mode: 'insensitive' } },
-        // CORREÇÃO: camelCase
         { user: { name: { contains: search, mode: 'insensitive' } } },
       ];
     }
@@ -180,7 +182,6 @@ export class DriversService {
           where,
           skip,
           take,
-          // CORREÇÃO: camelCase
           include: { user: { select: { id: true, name: true, email: true } } },
           orderBy: { createdAt: 'desc' },
         }),
@@ -207,7 +208,6 @@ export class DriversService {
       return await this.prisma.driver.findMany({
         where: { tenantId },
         include: {
-          // CORREÇÃO: camelCase
           user: {
             select: { id: true, name: true, email: true },
           },
@@ -226,7 +226,6 @@ export class DriversService {
     const driver = await this.prisma.driver.findFirst({
       where: { id, tenantId },
       include: {
-        // CORREÇÃO: camelCase
         user: {
           select: {
             id: true,
@@ -314,7 +313,6 @@ export class DriversService {
       return this.prisma.driver.update({
         where: { id },
         data: updateDriverDto,
-        // CORREÇÃO: camelCase
         include: { user: { select: { id: true, name: true, email: true } } },
       });
     } catch (error) {
@@ -360,7 +358,6 @@ export class DriversService {
     });
   }
 
-  // CORREÇÃO: Alterado o tipo do parâmetro 'status' para o Enum do Prisma
   async updateOrderStatus(
     orderId: string,
     status: OrderStatus,
@@ -394,12 +391,10 @@ export class DriversService {
       );
     }
 
-    // Lembrete: Esta parte será refatorada futuramente para usar o StorageAdapter
     const proofUrl = `path/to/your/proof/${file.filename}`;
 
     return this.prisma.deliveryProof.create({
       data: {
-        // CORREÇÃO: camelCase
         order: { connect: { id: orderId } },
         driver: { connect: { id: driver.id } },
         tenant: { connect: { id: driver.tenantId } },
