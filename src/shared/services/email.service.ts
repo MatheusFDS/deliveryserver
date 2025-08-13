@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as sgMail from '@sendgrid/mail';
 
+// ... (interface SendInviteEmailParams permanece a mesma)
 interface SendInviteEmailParams {
   email: string;
   inviterName: string;
@@ -17,12 +18,53 @@ interface SendStatusEmailParams {
   data: any;
 }
 
+/**
+ * Interface para os parâmetros do e-mail de redefinição de senha.
+ */
+interface SendPasswordResetEmailParams {
+  email: string;
+  name: string;
+  resetLink: string;
+}
+
 @Injectable()
 export class EmailService {
   constructor(private readonly configService: ConfigService) {
     const apiKey = this.configService.get<string>('SENDGRID_API_KEY');
     if (apiKey) {
       sgMail.setApiKey(apiKey);
+    }
+  }
+
+  /**
+   * NOVO MÉTODO: Envia um e-mail com o link para redefinição de senha.
+   */
+  async sendPasswordResetEmail(
+    params: SendPasswordResetEmailParams,
+  ): Promise<void> {
+    const { email, name, resetLink } = params;
+
+    const subject = 'Redefinição de Senha - Sistema de Gestão';
+    const html = this.generatePasswordResetTemplate({ name, resetLink });
+
+    const msg = {
+      to: email,
+      from:
+        this.configService.get<string>('SENDGRID_FROM_EMAIL') ||
+        'noreply@sistema.com',
+      subject,
+      html,
+    };
+
+    try {
+      await sgMail.send(msg);
+    } catch (error) {
+      // Logar o erro internamente sem expô-lo
+      console.error(
+        `Erro ao enviar email de redefinição de senha: ${(error as Error).message}`,
+      );
+      // Não lançar o erro para a camada de serviço para não vazar a informação
+      // de que o e-mail talvez não tenha sido enviado. A mensagem ao usuário será sempre a mesma.
     }
   }
 
@@ -58,10 +100,13 @@ export class EmailService {
     try {
       await sgMail.send(msg);
     } catch (error) {
-      throw new Error(`Erro ao enviar email de convite: ${error.message}`);
+      throw new Error(
+        `Erro ao enviar email de convite: ${(error as Error).message}`,
+      );
     }
   }
 
+  // ... (método sendStatusEmail e outros templates permanecem os mesmos)
   async sendStatusEmail(params: SendStatusEmailParams): Promise<void> {
     const { email, templateId, data } = params;
 
@@ -106,7 +151,9 @@ export class EmailService {
     try {
       await sgMail.send(msg);
     } catch (error) {
-      throw new Error(`Erro ao enviar email de status: ${error.message}`);
+      throw new Error(
+        `Erro ao enviar email de status: ${(error as Error).message}`,
+      );
     }
   }
 
@@ -128,6 +175,104 @@ export class EmailService {
     }
   }
 
+  /**
+   * NOVO TEMPLATE: Gera o HTML para o e-mail de redefinição de senha.
+   */
+  private generatePasswordResetTemplate(params: {
+    name: string;
+    resetLink: string;
+  }): string {
+    const { name, resetLink } = params;
+    return `
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Redefinição de Senha</title>
+        <style>
+            body { 
+                font-family: "Inter", "Roboto", "Helvetica", "Arial", sans-serif; 
+                line-height: 1.6; 
+                color: #2e3440; 
+                margin: 0; 
+                padding: 0;
+                background-color: #f7f8fa;
+            }
+            .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+            .header { 
+                background: linear-gradient(135deg, #00695c 0%, #004c40 100%); 
+                color: white; 
+                padding: 40px 30px; 
+                text-align: center; 
+                border-radius: 12px 12px 0 0;
+            }
+            .header h1 { margin: 0 0 10px 0; font-size: 2rem; font-weight: 600; }
+            .content { background: #ffffff; padding: 40px 30px; border-radius: 0 0 12px 12px; }
+            .content h2 { color: #2e3440; font-size: 1.5rem; margin: 0 0 20px 0; }
+            .content p { font-size: 0.875rem; line-height: 1.6; margin: 0 0 15px 0; }
+            .button { 
+                display: inline-block; 
+                background: #00695c; 
+                color: white !important; 
+                padding: 16px 32px; 
+                text-decoration: none; 
+                border-radius: 8px; 
+                margin: 25px 0; 
+                font-weight: 500;
+                font-size: 0.875rem;
+            }
+            .warning { 
+                background: rgba(237, 108, 2, 0.1); 
+                border-left: 4px solid #ed6c02;
+                color: #e65100;
+                padding: 20px; 
+                border-radius: 0 8px 8px 0; 
+                margin: 25px 0; 
+            }
+            .footer { text-align: center; margin-top: 30px; color: #5e6b73; font-size: 0.75rem; }
+            .link-box {
+                background: #f1f3f4; 
+                padding: 15px; 
+                border-radius: 8px; 
+                word-break: break-all; 
+                font-family: "Roboto Mono", monospace;
+                font-size: 0.75rem;
+                color: #5e6b73;
+                margin-top: 15px;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <div class="header">
+                <h1>🔑 Redefinição de Senha</h1>
+            </div>
+            <div class="content">
+                <h2>Olá, ${name}!</h2>
+                <p>Recebemos uma solicitação para redefinir a senha da sua conta. Se você não fez essa solicitação, pode ignorar este e-mail com segurança.</p>
+                <p>Para criar uma nova senha, clique no botão abaixo:</p>
+                <div style="text-align: center;">
+                    <a href="${resetLink}" class="button">Redefinir Minha Senha</a>
+                </div>
+                <div class="warning">
+                    <strong>Atenção:</strong> Por segurança, este link é válido por um tempo limitado.
+                </div>
+                <hr style="margin: 30px 0; border: none; border-top: 1px solid #e0e4e7;">
+                <p>Se o botão não funcionar, copie e cole o seguinte link no seu navegador:</p>
+                <div class="link-box">${resetLink}</div>
+            </div>
+            <div class="footer">
+                <p>Este é um email automático. Não responda a esta mensagem.</p>
+                <p>© 2024 Sistema de Gestão de Entregas. Todos os direitos reservados.</p>
+            </div>
+        </div>
+    </body>
+    </html>
+    `;
+  }
+
+  // ... (templates restantes permanecem os mesmos)
   private generateInviteEmailTemplate(params: {
     inviterName: string;
     roleName: string;

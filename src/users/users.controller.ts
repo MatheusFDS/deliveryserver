@@ -19,19 +19,30 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
 import { Request } from 'express';
+import { ForgotPasswordDto } from './dto/forgot-password.dto';
 
 @Controller('users')
-@UseGuards(JwtAuthGuard, RolesGuard)
+// @UseGuards foi removido daqui para permitir rotas públicas
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
+  /**
+   * Endpoint público para solicitar a redefinição de senha.
+   */
+  @Post('forgot-password')
+  async forgotPassword(@Body() forgotPasswordDto: ForgotPasswordDto) {
+    return this.usersService.forgotPassword(forgotPasswordDto);
+  }
+
   @Get('me')
+  @UseGuards(JwtAuthGuard) // Guard aplicado individualmente
   async getMe(@Req() req: Request) {
     const userId = (req.user as any).userId;
     return this.usersService.findOneById(userId);
   }
 
   @Post()
+  @UseGuards(JwtAuthGuard, RolesGuard) // Guard aplicado individualmente
   @Roles('admin')
   async invite(@Body() inviteUserDto: InviteUserDto, @Req() req: Request) {
     const requestingUserId = (req.user as any).userId;
@@ -43,6 +54,7 @@ export class UsersController {
   }
 
   @Get()
+  @UseGuards(JwtAuthGuard, RolesGuard) // Guard aplicado individualmente
   @Roles('admin')
   async findAll(
     @Req() req: Request,
@@ -61,6 +73,7 @@ export class UsersController {
   }
 
   @Get('all')
+  @UseGuards(JwtAuthGuard, RolesGuard) // Guard aplicado individualmente
   @Roles('admin')
   async findAllList(@Req() req: Request) {
     const requestingUserId = (req.user as any).userId;
@@ -68,6 +81,7 @@ export class UsersController {
   }
 
   @Get(':id')
+  @UseGuards(JwtAuthGuard, RolesGuard) // Guard aplicado individualmente
   @Roles('admin')
   async findOne(@Param('id') id: string, @Req() req: Request) {
     const requestingUserId = (req.user as any).userId;
@@ -75,6 +89,7 @@ export class UsersController {
   }
 
   @Patch(':id')
+  @UseGuards(JwtAuthGuard, RolesGuard) // Guard aplicado individualmente
   @Roles('admin')
   async update(
     @Param('id') id: string,
@@ -89,14 +104,19 @@ export class UsersController {
     );
   }
 
+  /**
+   * Endpoint para DELETAR PERMANENTEMENTE um usuário.
+   * A lógica foi alterada de soft-delete para hard-delete.
+   */
   @Delete(':id')
+  @UseGuards(JwtAuthGuard, RolesGuard) // Guard aplicado individualmente
   @Roles('admin')
   async remove(@Param('id') id: string, @Req() req: Request) {
     const requestingUserId = (req.user as any).userId;
-    return this.usersService.updateUserForTenant(
-      id,
-      { isActive: false },
-      requestingUserId,
-    );
+    // Lógica anterior: inativava o usuário
+    // return this.usersService.updateUserForTenant(id, { isActive: false }, requestingUserId);
+
+    // Nova lógica: deleta o usuário permanentemente
+    return this.usersService.deleteUserForTenant(id, requestingUserId);
   }
 }

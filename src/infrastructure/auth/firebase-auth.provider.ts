@@ -133,4 +133,67 @@ export class FirebaseAuthProvider implements IAuthProvider, OnModuleInit {
 
     return user as UserWithRole;
   }
+
+  // --- NOVOS MÉTODOS ---
+
+  async createUser(data: {
+    email: string;
+    password?: string;
+    displayName?: string;
+  }): Promise<{ uid: string }> {
+    try {
+      const userRecord = await admin.auth().createUser({
+        email: data.email,
+        password: data.password,
+        displayName: data.displayName,
+        emailVerified: false, // Opcional: pode ser true se você tiver um fluxo de verificação
+      });
+      return { uid: userRecord.uid };
+    } catch (error) {
+      // O NestJS lida com a remoção do 'error.message' em produção.
+      throw new InternalServerErrorException(
+        'Erro ao criar usuário no Firebase.',
+        error.message,
+      );
+    }
+  }
+
+  async updateUser(
+    uid: string,
+    data: { password?: string; disabled?: boolean; displayName?: string },
+  ): Promise<void> {
+    try {
+      await admin.auth().updateUser(uid, data);
+    } catch (error) {
+      throw new InternalServerErrorException(
+        'Erro ao atualizar usuário no Firebase.',
+        error.message,
+      );
+    }
+  }
+
+  async deleteUser(uid: string): Promise<void> {
+    try {
+      await admin.auth().deleteUser(uid);
+    } catch (error) {
+      throw new InternalServerErrorException(
+        'Erro ao deletar usuário no Firebase.',
+        error.message,
+      );
+    }
+  }
+
+  async generatePasswordResetLink(email: string): Promise<string> {
+    try {
+      const link = await admin.auth().generatePasswordResetLink(email);
+      return link;
+    } catch (error) {
+      // Firebase lança erro se o e-mail não existe.
+      // A camada de serviço (UserService) deve tratar isso para não expor quais e-mails existem.
+      throw new InternalServerErrorException(
+        'Erro ao gerar o link de redefinição de senha.',
+        error.message,
+      );
+    }
+  }
 }

@@ -6,6 +6,7 @@ import {
   UnauthorizedException,
   InternalServerErrorException,
   ConflictException,
+  Inject,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateUserDto } from './dto/create-user.dto';
@@ -15,12 +16,18 @@ import { EmailService } from '../shared/services/email.service';
 import * as bcrypt from 'bcrypt';
 import { Prisma, InviteStatus } from '@prisma/client';
 import { addDays } from 'date-fns';
+import {
+  AUTH_PROVIDER,
+  IAuthProvider,
+} from '../infrastructure/auth/auth.provider.interface';
+import { ForgotPasswordDto } from './dto/forgot-password.dto';
 
 @Injectable()
 export class UsersService {
   constructor(
     private prisma: PrismaService,
     private emailService: EmailService,
+    @Inject(AUTH_PROVIDER) private readonly authProvider: IAuthProvider,
   ) {}
 
   private async getTenantIdFromUserId(userId: string): Promise<string> {
@@ -42,6 +49,7 @@ export class UsersService {
     role: { name: string; isPlatformRole: boolean };
     tenantId: string | null;
     tenant?: { name: string } | null;
+    firebaseUid: string;
   }> {
     const user = await this.prisma.user.findUnique({
       where: { id: requestingUserId },
@@ -51,12 +59,51 @@ export class UsersService {
         role: { select: { name: true, isPlatformRole: true } },
         tenantId: true,
         tenant: { select: { name: true } },
+        firebaseUid: true,
       },
     });
     if (!user) {
       throw new UnauthorizedException('Usuário solicitante não encontrado.');
     }
     return user;
+  }
+
+  /**
+   * Versão corrigida do método forgotPassword
+   */
+  async forgotPassword(
+    forgotPasswordDto: ForgotPasswordDto,
+  ): Promise<{ message: string }> {
+    const { email } = forgotPasswordDto;
+    const user = await this.prisma.user.findUnique({ where: { email } });
+
+    const successMessage =
+      'Se um usuário com este e-mail estiver registrado, um link para redefinição de senha será enviado.';
+
+    // A verificação do usuário é feita antes para evitar chamar o provedor desnecessariamente.
+    // E por segurança, sempre retornamos a mesma mensagem.
+    if (user) {
+      try {
+        // 1. Gera o link de redefinição através do provedor de autenticação.
+        const resetLink =
+          await this.authProvider.generatePasswordResetLink(email);
+
+        // 2. Usa o serviço de e-mail para enviar o link gerado.
+        // (Assumindo que o método sendPasswordResetEmail existe no seu EmailService)
+        await this.emailService.sendPasswordResetEmail({
+          email: user.email,
+          name: user.name,
+          resetLink: resetLink,
+        });
+      } catch (error) {
+        // Em caso de erro (ex: falha no envio do e-mail),
+        // registramos o erro internamente mas não o expomos ao cliente
+        // para não vazar informações sobre o estado do sistema.
+        console.error('Falha no processo de redefinição de senha:', error);
+      }
+    }
+
+    return { message: successMessage };
   }
 
   async inviteUserForTenant(
@@ -75,8 +122,6 @@ export class UsersService {
 
     const { email, roleId } = inviteUserDto;
 
-    // *** VALIDAÇÃO ADICIONADA AQUI ***
-    // Verifica se o email já existe em toda a tabela de usuários (User)
     const emailAlreadyExistsInUsers = await this.prisma.user.findUnique({
       where: { email },
     });
@@ -275,6 +320,11 @@ export class UsersService {
     updateUserDto: UpdateUserDto,
     requestingUserId: string,
   ) {
+    // Proibido alterar e-mail
+    if (updateUserDto.email) {
+      throw new BadRequestException('Não é permitido alterar o e-mail.');
+    }
+
     const requestingUserTenantId =
       await this.getTenantIdFromUserId(requestingUserId);
 
@@ -319,20 +369,32 @@ export class UsersService {
 
     const { password, ...updateData } = updateUserDto;
 
-    if (password) {
-      (updateData as any).password = await bcrypt.hash(password, 10);
-    }
-
-    if (updateUserDto.roleId) {
-      const targetRole = await this.prisma.role.findUnique({
-        where: { id: updateUserDto.roleId },
-      });
-      if (!targetRole || targetRole.isPlatformRole) {
-        throw new BadRequestException('Perfil inválido ou não permitido.');
-      }
-    }
-
     try {
+      // Atualiza no Firebase primeiro
+      if (password) {
+        await this.authProvider.updateUser(userToUpdate.firebaseUid, {
+          password,
+        });
+      }
+      if (typeof updateUserDto.isActive === 'boolean') {
+        await this.authProvider.updateUser(userToUpdate.firebaseUid, {
+          disabled: !updateUserDto.isActive,
+        });
+      }
+
+      // Se sucesso no Firebase, atualiza no banco de dados local
+      if (password) {
+        (updateData as any).password = await bcrypt.hash(password, 10);
+      }
+      if (updateUserDto.roleId) {
+        const targetRole = await this.prisma.role.findUnique({
+          where: { id: updateUserDto.roleId },
+        });
+        if (!targetRole || targetRole.isPlatformRole) {
+          throw new BadRequestException('Perfil inválido ou não permitido.');
+        }
+      }
+
       return this.prisma.user.update({
         where: { id },
         data: updateData,
@@ -347,9 +409,51 @@ export class UsersService {
     } catch (error) {
       throw new InternalServerErrorException(
         'Erro inesperado ao atualizar o usuário.',
+        error.message,
       );
     }
   }
+
+  // O método deleteUserForTenant que você aprovou na primeira etapa já está aqui
+  // e será usado pelo controller.
+  async deleteUserForTenant(
+    id: string,
+    requestingUserId: string,
+  ): Promise<{ message: string }> {
+    const requestingUserTenantId =
+      await this.getTenantIdFromUserId(requestingUserId);
+
+    const userToDelete = await this.prisma.user.findFirst({
+      where: { id, tenantId: requestingUserTenantId },
+    });
+
+    if (!userToDelete) {
+      throw new NotFoundException(
+        'Usuário não encontrado ou não pertence à sua empresa.',
+      );
+    }
+
+    if (userToDelete.id === requestingUserId) {
+      throw new BadRequestException('Você não pode excluir sua própria conta.');
+    }
+
+    try {
+      // Exclui do Firebase primeiro
+      await this.authProvider.deleteUser(userToDelete.firebaseUid);
+
+      // Se sucesso, exclui do banco de dados local
+      await this.prisma.user.delete({ where: { id } });
+
+      return { message: 'Usuário excluído com sucesso.' };
+    } catch (error) {
+      throw new InternalServerErrorException(
+        'Erro ao excluir o usuário.',
+        (error as Error).message,
+      );
+    }
+  }
+
+  // --- MÉTODOS DE PLATAFORMA (SUPERADMIN) ---
 
   async createPlatformUser(
     createUserDto: CreateUserDto,
@@ -406,25 +510,41 @@ export class UsersService {
       );
     }
 
-    const hashedPassword = await bcrypt.hash(password, 10);
-
-    return this.prisma.user.create({
-      data: {
-        ...data,
-        password: hashedPassword,
-        tenantId: targetTenantId,
-        roleId: roleId,
-        isActive: true,
-      },
-      select: {
-        id: true,
-        email: true,
-        name: true,
-        role: { select: { name: true } },
-        tenantId: true,
-        isActive: true,
-      },
+    // Cria usuário no Firebase
+    const firebaseUser = await this.authProvider.createUser({
+      email: data.email,
+      password: password,
+      displayName: data.name,
     });
+
+    try {
+      const hashedPassword = await bcrypt.hash(password, 10);
+      // Cria usuário no banco de dados local com o UID do Firebase
+      return this.prisma.user.create({
+        data: {
+          ...data,
+          password: hashedPassword,
+          tenantId: targetTenantId,
+          roleId: roleId,
+          isActive: true,
+          firebaseUid: firebaseUser.uid,
+        },
+        select: {
+          id: true,
+          email: true,
+          name: true,
+          role: { select: { name: true } },
+          tenantId: true,
+          isActive: true,
+        },
+      });
+    } catch (error) {
+      // Se a criação no banco de dados falhar, remove o usuário do Firebase.
+      await this.authProvider.deleteUser(firebaseUser.uid);
+      throw new InternalServerErrorException(
+        'Erro ao criar usuário no banco de dados local.',
+      );
+    }
   }
 
   async findAllUsersPlatform(
@@ -529,6 +649,11 @@ export class UsersService {
     updateUserDto: UpdateUserDto,
     requestingUserId: string,
   ) {
+    // Proibido alterar e-mail
+    if (updateUserDto.email) {
+      throw new BadRequestException('Não é permitido alterar o e-mail.');
+    }
+
     const requestingUser =
       await this.getRequestingUserWithRoleAndTenant(requestingUserId);
     if (requestingUser.role.name !== 'superadmin') {
@@ -560,22 +685,42 @@ export class UsersService {
     }
 
     const { password, ...updateData } = updateUserDto;
-    if (password) {
-      (updateData as any).password = await bcrypt.hash(password, 10);
-    }
 
-    return this.prisma.user.update({
-      where: { id },
-      data: updateData,
-      select: {
-        id: true,
-        email: true,
-        name: true,
-        role: { select: { name: true } },
-        tenantId: true,
-        isActive: true,
-      },
-    });
+    try {
+      // Atualiza no Firebase primeiro
+      if (password) {
+        await this.authProvider.updateUser(userToUpdate.firebaseUid, {
+          password,
+        });
+      }
+      if (typeof updateUserDto.isActive === 'boolean') {
+        await this.authProvider.updateUser(userToUpdate.firebaseUid, {
+          disabled: !updateUserDto.isActive,
+        });
+      }
+
+      if (password) {
+        (updateData as any).password = await bcrypt.hash(password, 10);
+      }
+
+      return this.prisma.user.update({
+        where: { id },
+        data: updateData,
+        select: {
+          id: true,
+          email: true,
+          name: true,
+          role: { select: { name: true } },
+          tenantId: true,
+          isActive: true,
+        },
+      });
+    } catch (error) {
+      throw new InternalServerErrorException(
+        'Erro inesperado ao atualizar o usuário.',
+        error.message,
+      );
+    }
   }
 
   async inactivateUserPlatform(id: string, requestingUserId: string) {
@@ -619,17 +764,30 @@ export class UsersService {
       }
     }
 
-    return this.prisma.user.update({
-      where: { id },
-      data: { isActive: false },
-      select: {
-        id: true,
-        email: true,
-        name: true,
-        role: { select: { name: true } },
-        tenantId: true,
-        isActive: true,
-      },
-    });
+    try {
+      // Desabilita no Firebase
+      await this.authProvider.updateUser(userToInactivate.firebaseUid, {
+        disabled: true,
+      });
+
+      // Inativa no banco de dados local
+      return this.prisma.user.update({
+        where: { id },
+        data: { isActive: false },
+        select: {
+          id: true,
+          email: true,
+          name: true,
+          role: { select: { name: true } },
+          tenantId: true,
+          isActive: true,
+        },
+      });
+    } catch (error) {
+      throw new InternalServerErrorException(
+        'Erro ao inativar o usuário.',
+        error.message,
+      );
+    }
   }
 }
