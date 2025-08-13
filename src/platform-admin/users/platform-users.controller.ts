@@ -42,24 +42,18 @@ export class PlatformUsersController {
     @Query('tenantId', new ParseUUIDPipe({ optional: true })) tenantId?: string,
   ) {
     const requestingUserId = (req.user as any).userId;
-
-    // Buscar dados do usuário que está convidando
     const requestingUser = await this.prisma.user.findUnique({
       where: { id: requestingUserId },
       select: { name: true },
     });
-
     const targetRole = await this.prisma.role.findUnique({
       where: { id: inviteUserDto.roleId },
     });
-
     if (!targetRole) {
       throw new Error('Role especificada não existe.');
     }
-
     let finalTenantId: string | null = null;
     let tenantName: string | undefined = undefined;
-
     if (targetRole.isPlatformRole) {
       finalTenantId = null;
     } else {
@@ -82,7 +76,6 @@ export class PlatformUsersController {
         tenantName = firstTenant.name;
       }
     }
-
     const expiresAt = addDays(new Date(), 7);
     const result = await this.prisma.userInvite.create({
       data: {
@@ -98,8 +91,6 @@ export class PlatformUsersController {
         tenant: true,
       },
     });
-
-    // Enviar email de convite
     try {
       await this.emailService.sendInviteEmail({
         email: inviteUserDto.email,
@@ -109,7 +100,6 @@ export class PlatformUsersController {
         inviteToken: result.id,
         expiresAt,
       });
-
       return {
         message: 'Convite enviado com sucesso!',
         invite: result,
@@ -196,12 +186,14 @@ export class PlatformUsersController {
     );
   }
 
+  // CORREÇÃO: Esta rota agora chama o método correto para exclusão permanente.
   @Delete(':userId')
   async deleteUser(
     @Param('userId', ParseUUIDPipe) userId: string,
     @Req() req: Request,
   ) {
     const requestingUserId = (req.user as any).userId;
-    return this.usersService.inactivateUserPlatform(userId, requestingUserId);
+    // Lógica anterior que chamava inactivateUserPlatform foi trocada
+    return this.usersService.deletePlatformUser(userId, requestingUserId);
   }
 }
