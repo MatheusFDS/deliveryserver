@@ -124,6 +124,8 @@ model Tenant {
   optimizedRoutes       OptimizedRoute[]
   notifications         Notification[]
   invites               UserInvite[] // Relação inversa
+
+  Lead Lead[]
 }
 
 model UserSettings {
@@ -411,3 +413,31 @@ model UserInvite {
   @@unique([email, tenantId, status])
 }
 
+model Lead {
+  id          String   @id @default(cuid())
+  companyName String
+  contactName String
+  email       String
+  phone       String
+  fleetSize   Int?
+  message     String?
+  source      String   @default("landing-page")
+  status      LeadStatus @default(NEW)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  // Relacionamentos opcionais
+  tenantId    String?
+  tenant      Tenant?  @relation(fields: [tenantId], references: [id])
+  
+  @@map("leads")
+}
+
+enum LeadStatus {
+  NEW
+  CONTACTED
+  QUALIFIED
+  DEMO_SCHEDULED
+  CONVERTED
+  LOST
+}

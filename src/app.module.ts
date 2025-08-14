@@ -27,6 +27,7 @@ import { MobileModule } from './mobile/mobile.module';
 import { RoutesModule } from './routes/routes.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { InvitesModule } from './invites/invites.module';
+import { LandingModule } from './landing/landing.module';
 
 @Module({
   imports: [
@@ -54,6 +55,7 @@ import { InvitesModule } from './invites/invites.module';
     MobileModule,
     RoutesModule,
     NotificationsModule,
+    LandingModule,
   ],
   controllers: [],
   providers: [],

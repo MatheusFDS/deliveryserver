@@ -2,7 +2,6 @@ import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as sgMail from '@sendgrid/mail';
 
-// ... (interface SendInviteEmailParams permanece a mesma)
 interface SendInviteEmailParams {
   email: string;
   inviterName: string;
@@ -18,13 +17,19 @@ interface SendStatusEmailParams {
   data: any;
 }
 
-/**
- * Interface para os parâmetros do e-mail de redefinição de senha.
- */
 interface SendPasswordResetEmailParams {
   email: string;
   name: string;
   resetLink: string;
+}
+
+interface SendNewLeadEmailParams {
+  companyName: string;
+  contactName: string;
+  email: string;
+  phone: string;
+  fleetSize: number;
+  message: string;
 }
 
 @Injectable()
@@ -36,9 +41,36 @@ export class EmailService {
     }
   }
 
-  /**
-   * NOVO MÉTODO: Envia um e-mail com o link para redefinição de senha.
-   */
+  async sendNewLeadEmail(params: SendNewLeadEmailParams): Promise<void> {
+    const toEmail = this.configService.get<string>('COMMERCIAL_TEAM_EMAIL');
+    if (!toEmail) {
+      console.error(
+        'E-mail da equipe comercial (COMMERCIAL_TEAM_EMAIL) não configurado.',
+      );
+      return;
+    }
+
+    const subject = `Novo Lead Recebido: ${params.companyName}`;
+    const html = this.generateNewLeadTemplate(params);
+
+    const msg = {
+      to: toEmail,
+      from:
+        this.configService.get<string>('SENDGRID_FROM_EMAIL') ||
+        'noreply@sistema.com',
+      subject,
+      html,
+    };
+
+    try {
+      await sgMail.send(msg);
+    } catch (error) {
+      console.error(
+        `Erro ao enviar email de notificação de lead: ${(error as Error).message}`,
+      );
+    }
+  }
+
   async sendPasswordResetEmail(
     params: SendPasswordResetEmailParams,
   ): Promise<void> {
@@ -59,12 +91,9 @@ export class EmailService {
     try {
       await sgMail.send(msg);
     } catch (error) {
-      // Logar o erro internamente sem expô-lo
       console.error(
         `Erro ao enviar email de redefinição de senha: ${(error as Error).message}`,
       );
-      // Não lançar o erro para a camada de serviço para não vazar a informação
-      // de que o e-mail talvez não tenha sido enviado. A mensagem ao usuário será sempre a mesma.
     }
   }
 
@@ -106,7 +135,6 @@ export class EmailService {
     }
   }
 
-  // ... (método sendStatusEmail e outros templates permanecem os mesmos)
   async sendStatusEmail(params: SendStatusEmailParams): Promise<void> {
     const { email, templateId, data } = params;
 
@@ -118,22 +146,18 @@ export class EmailService {
         subject = this.getOrderStatusSubject(data.newStatus, data.orderNumber);
         html = this.generateOrderStatusTemplate(data);
         break;
-
       case 'delivery-completed':
         subject = `Roteiro ${data.deliveryId?.slice(0, 8)}... finalizado`;
         html = this.generateDeliveryCompletedTemplate(data);
         break;
-
       case 'delivery-approved-for-driver':
         subject = `Roteiro aprovado para entrega`;
         html = this.generateDeliveryApprovedTemplate(data);
         break;
-
       case 'delivery-rejected':
         subject = `Roteiro rejeitado`;
         html = this.generateDeliveryRejectedTemplate(data);
         break;
-
       default:
         subject = 'Notificação do Sistema';
         html = this.generateGenericTemplate(data);
@@ -157,6 +181,58 @@ export class EmailService {
     }
   }
 
+  private generateNewLeadTemplate(params: SendNewLeadEmailParams): string {
+    const { companyName, contactName, email, phone, fleetSize, message } =
+      params;
+    return `
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Novo Lead Recebido</title>
+        <style>
+            body { font-family: "Inter", "Roboto", "Helvetica", "Arial", sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; background-color: #f4f4f4; }
+            .container { max-width: 600px; margin: 20px auto; padding: 20px; background-color: #ffffff; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
+            .header { background: #005a4d; color: white; padding: 20px; text-align: center; border-radius: 8px 8px 0 0; }
+            .header h1 { margin: 0; font-size: 24px; }
+            .content { padding: 30px 20px; }
+            .content h2 { color: #005a4d; font-size: 20px; border-bottom: 2px solid #eeeeee; padding-bottom: 10px; margin-bottom: 20px; }
+            .lead-info p { font-size: 16px; margin: 10px 0; color: #555; }
+            .lead-info strong { color: #333; }
+            .message-box { background: #f9f9f9; border-left: 4px solid #005a4d; padding: 15px; margin-top: 20px; border-radius: 4px; }
+            .message-box p { margin: 0; white-space: pre-wrap; }
+            .footer { text-align: center; margin-top: 20px; color: #888; font-size: 12px; }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <div class="header">
+                <h1>🌟 Novo Lead da Landing Page!</h1>
+            </div>
+            <div class="content">
+                <h2>Detalhes do Contato</h2>
+                <div class="lead-info">
+                    <p><strong>Empresa:</strong> ${companyName}</p>
+                    <p><strong>Nome do Contato:</strong> ${contactName}</p>
+                    <p><strong>Email:</strong> <a href="mailto:${email}">${email}</a></p>
+                    <p><strong>Telefone:</strong> ${phone}</p>
+                    <p><strong>Tamanho da Frota:</strong> ${fleetSize} veículos</p>
+                </div>
+                <h2>Mensagem</h2>
+                <div class="message-box">
+                    <p>${message}</p>
+                </div>
+            </div>
+            <div class="footer">
+                <p>Este e-mail foi enviado automaticamente pelo sistema.</p>
+            </div>
+        </div>
+    </body>
+    </html>
+    `;
+  }
+
   private getOrderStatusSubject(
     newStatus: string,
     orderNumber: string,
@@ -175,9 +251,6 @@ export class EmailService {
     }
   }
 
-  /**
-   * NOVO TEMPLATE: Gera o HTML para o e-mail de redefinição de senha.
-   */
   private generatePasswordResetTemplate(params: {
     name: string;
     resetLink: string;
@@ -264,7 +337,7 @@ export class EmailService {
             </div>
             <div class="footer">
                 <p>Este é um email automático. Não responda a esta mensagem.</p>
-                <p>© 2024 Sistema de Gestão de Entregas. Todos os direitos reservados.</p>
+                <p>© 2025 Sistema de Gestão de Entregas. Todos os direitos reservados.</p>
             </div>
         </div>
     </body>
@@ -272,7 +345,6 @@ export class EmailService {
     `;
   }
 
-  // ... (templates restantes permanecem os mesmos)
   private generateInviteEmailTemplate(params: {
     inviterName: string;
     roleName: string;
@@ -491,7 +563,7 @@ export class EmailService {
             
             <div class="footer">
                 <p>Este é um email automático. Não responda a esta mensagem.</p>
-                <p>© 2024 Sistema de Gestão de Entregas. Todos os direitos reservados.</p>
+                <p>© 2025 Sistema de Gestão de Entregas. Todos os direitos reservados.</p>
             </div>
         </div>
     </body>
@@ -671,7 +743,7 @@ export class EmailService {
             
             <div class="footer">
                 <p>Este é um email automático do Sistema de Gestão de Entregas.</p>
-                <p>© 2024 Sistema de Gestão. Todos os direitos reservados.</p>
+                <p>© 2025 Sistema de Gestão. Todos os direitos reservados.</p>
             </div>
         </div>
     </body>
@@ -916,7 +988,7 @@ export class EmailService {
   }
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  private generateGenericTemplate(data: any): string {
+  private generateGenericTemplate(_data: any): string {
     return `
     <!DOCTYPE html>
     <html>
@@ -991,7 +1063,7 @@ export class EmailService {
             
             <div class="footer">
                 <p>Sistema de Gestão de Entregas - Notificação Automática</p>
-                <p>© 2024 Sistema de Gestão. Todos os direitos reservados.</p>
+                <p>© 2025 Sistema de Gestão. Todos os direitos reservados.</p>
             </div>
         </div>
     </body>

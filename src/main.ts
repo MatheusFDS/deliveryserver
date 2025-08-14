@@ -95,6 +95,14 @@ async function bootstrap() {
     prefix: '/uploads/',
   });
 
+  app.use('/landing', (req, res, next) => {
+    if (req.path === '/' || req.path === '/index.html') {
+      res.sendFile(join(process.cwd(), 'landing', 'index.html'));
+    } else {
+      next();
+    }
+  });
+
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
@@ -106,10 +114,6 @@ async function bootstrap() {
   app.useGlobalFilters(new AppExceptionFilter());
 
   await app.listen(port, '0.0.0.0');
-
-  console.log(`🚀 Aplicação rodando na porta ${port}`);
-  console.log(`📡 WebSocket habilitado com CORS configurado`);
-  console.log(`🖼️  Arquivos estáticos sendo servidos de /uploads`);
 }
 
 bootstrap().catch((err) => {
