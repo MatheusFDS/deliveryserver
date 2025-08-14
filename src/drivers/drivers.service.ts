@@ -10,7 +10,6 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CreateDriverDto } from './dto/create-driver.dto';
 import { UpdateDriverDto } from './dto/update-driver.dto';
 import { Prisma, OrderStatus } from '@prisma/client';
-import * as bcrypt from 'bcrypt';
 
 @Injectable()
 export class DriversService {
@@ -23,6 +22,7 @@ export class DriversService {
       password?: string;
       cpf?: string;
       license?: string;
+      firebaseUid: string;
     },
     invite: { tenantId: string; roleId: string },
   ) {
@@ -35,16 +35,15 @@ export class DriversService {
       );
     }
 
-    const passwordHash = await bcrypt.hash(profileData.password, 10);
-
     return this.prisma.$transaction(async (tx) => {
       const user = await tx.user.create({
         data: {
           email: profileData.email,
           name: profileData.name,
-          password: passwordHash,
+          password: profileData.password,
           tenantId: invite.tenantId,
           roleId: invite.roleId,
+          firebaseUid: profileData.firebaseUid,
           isActive: true,
         },
       });
@@ -329,7 +328,7 @@ export class DriversService {
     });
     if (!driver) {
       throw new NotFoundException(
-        'Motorista não encontrado ou não pertence à sua empresa.',
+        'Motorista não encontrado ou не pertence à sua empresa.',
       );
     }
 
@@ -370,7 +369,7 @@ export class DriversService {
 
     if (!order) {
       throw new NotFoundException(
-        'Pedido não encontrado ou não pertence a este motorista.',
+        'Pedido não encontrado ou не pertence a este motorista.',
       );
     }
 
@@ -387,7 +386,7 @@ export class DriversService {
     });
     if (!order) {
       throw new NotFoundException(
-        'Pedido não encontrado ou não pertence a este motorista.',
+        'Pedido não encontrado ou не pertence a este motorista.',
       );
     }
 
