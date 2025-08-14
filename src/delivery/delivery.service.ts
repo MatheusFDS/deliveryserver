@@ -5,15 +5,18 @@ import {
   BadRequestException,
   ForbiddenException,
   UnauthorizedException,
+  forwardRef,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateDeliveryDto } from './dto/create-delivery.dto';
 import { UpdateDeliveryDto } from './dto/update-delivery.dto';
+import { PaymentsService } from 'src/payments/payments.service';
 import {
   OrderStatus,
   DeliveryStatus,
   ApprovalAction,
   Prisma,
+  PaymentStatus,
 } from '@prisma/client';
 import { startOfDay, endOfDay } from 'date-fns';
 
@@ -45,6 +48,8 @@ export class DeliveryService {
     @Inject(AUDIT_PROVIDER) private readonly auditProvider: IAuditProvider,
     @Inject(NOTIFICATION_PROVIDER)
     private readonly notificationProvider: INotificationProvider,
+    @Inject(forwardRef(() => PaymentsService))
+    private readonly paymentsService: PaymentsService,
   ) {}
 
   private async getTenantIdFromUserId(userId: string): Promise<string> {
@@ -526,20 +531,44 @@ export class DeliveryService {
       data: updateData,
     });
 
-    const remainingOrders = await this.prisma.order.count({
+    const unfinishedOrdersCount = await this.prisma.order.count({
       where: {
         deliveryId: order.deliveryId,
-        status: { in: [OrderStatus.EM_ROTA, OrderStatus.EM_ENTREGA] },
+        NOT: {
+          status: {
+            in: [OrderStatus.ENTREGUE, OrderStatus.NAO_ENTREGUE],
+          },
+        },
       },
     });
 
     let deliveryCompleted = false;
-    if (remainingOrders === 0) {
-      await this.prisma.delivery.update({
-        where: { id: order.deliveryId! },
+    if (unfinishedOrdersCount === 0 && order.deliveryId) {
+      const deliveryToFinalize = await this.prisma.delivery.update({
+        where: { id: order.deliveryId },
         data: { status: DeliveryStatus.FINALIZADO, dataFim: new Date() },
       });
       deliveryCompleted = true;
+
+      // ---- CORREÇÃO APLICADA AQUI ----
+      // Monta o DTO completo para criar o pagamento.
+      try {
+        const paymentDto = {
+          amount: deliveryToFinalize.valorFrete,
+          status: PaymentStatus.PENDENTE,
+          tenantId: deliveryToFinalize.tenantId,
+          motoristaId: deliveryToFinalize.driverId,
+          deliveryId: deliveryToFinalize.id,
+        };
+
+        // Chama o serviço de pagamento com o DTO correto.
+        await this.paymentsService.create(paymentDto, userId);
+      } catch (error) {
+        console.error(
+          `Falha ao criar pagamento automático para a entrega ${order.deliveryId}:`,
+          error,
+        );
+      }
     }
 
     await this.auditProvider.logAction({

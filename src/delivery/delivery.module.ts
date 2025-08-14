@@ -17,12 +17,14 @@ import { DistanceFreightCalculator } from './providers/distance-freight.calculat
 
 import { DELIVERY_RULES_VALIDATOR_PROVIDER } from './providers/delivery-rules.validator.interface';
 import { TenantApprovalValidator } from './providers/tenant-approval.validator';
+import { PaymentsModule } from 'src/payments/payments.module';
 
 @Module({
   imports: [
     forwardRef(() => AuthModule),
     forwardRef(() => UsersModule),
     forwardRef(() => TenantModule),
+    forwardRef(() => PaymentsModule),
     RoutesModule,
   ],
   controllers: [DeliveryController],
