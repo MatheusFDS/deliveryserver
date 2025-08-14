@@ -128,11 +128,4 @@ export class DriversController {
     const userId = (req.user as any).userId;
     return this.driversService.saveProof(orderId, file, userId);
   }
-
-  @Get('payments')
-  @Roles('driver')
-  getPayments(@Req() req: Request) {
-    const userId = (req.user as any).userId;
-    return this.driversService.findPaymentsByAuthUser(userId);
-  }
 }

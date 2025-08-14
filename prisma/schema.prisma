@@ -120,7 +120,6 @@ model Tenant {
   accountsPayable       AccountsPayable[]
   paymentDeliveries     PaymentDelivery[]
   deliveryProofs        DeliveryProof[]
-  payments              Payment[]
   approvals             Approval[]
   optimizedRoutes       OptimizedRoute[]
   notifications         Notification[]
@@ -152,7 +151,6 @@ model Driver {
   orders          Order[]
   accountsPayable AccountsPayable[]
   deliveryProofs  DeliveryProof[]
-  payments        Payment[]
 
   @@unique([cpf, tenantId])
   @@index([tenantId])
@@ -336,17 +334,6 @@ model PaymentDelivery {
   delivery        Delivery        @relation(fields: [deliveryId], references: [id], onDelete: Cascade)
 
   @@id([paymentId, deliveryId])
-}
-
-model Payment {
-  id        String   @id @default(uuid())
-  amount    Float
-  driverId  String
-  tenantId  String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  driver    Driver   @relation(fields: [driverId], references: [id])
-  tenant    Tenant   @relation(fields: [tenantId], references: [id])
 }
 
 model DeliveryProof {

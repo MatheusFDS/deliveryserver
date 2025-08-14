@@ -403,13 +403,6 @@ export class DriversService {
     });
   }
 
-  async findPaymentsByAuthUser(userId: string) {
-    const driver = await this.getDriverByUserId(userId);
-    return this.prisma.payment.findMany({
-      where: { driverId: driver.id },
-    });
-  }
-
   async getAvailableUsersByUserId(userId: string) {
     const tenantId = await this.getTenantIdFromUserId(userId);
     return this.prisma.user.findMany({
