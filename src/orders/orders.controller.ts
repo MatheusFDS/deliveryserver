@@ -30,18 +30,18 @@ export class OrdersController {
   async findAll(
     @Req() req,
     @Query('search') search?: string,
-    @Query('status') status?: string, // <-- ADICIONADO AQUI
+    @Query('status') status?: string,
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string,
     @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number = 1,
-    @Query('pageSize', new DefaultValuePipe(10), ParseIntPipe)
+    @Query('pageSize', new DefaultValuePipe(100), ParseIntPipe)
     pageSize: number = 100,
   ) {
     const userId = req.user.userId;
     return this.ordersService.findAllByUserId(
       userId,
       search,
-      status, // <-- E AQUI
+      status,
       startDate,
       endDate,
       page,
