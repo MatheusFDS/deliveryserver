@@ -241,6 +241,34 @@ export class PaymentsService {
     }
   }
 
+  async revertPaymentToPending(id: string, userId: string) {
+    const tenantId = await this.getTenantIdFromUserId(userId);
+    const payment = await this.prisma.accountsPayable.findFirst({
+      where: { id, tenantId },
+    });
+
+    if (!payment) {
+      throw new NotFoundException('Pagamento não encontrado.');
+    }
+
+    if (payment.status !== PaymentStatus.PAGO) {
+      throw new BadRequestException(
+        `Apenas pagamentos com status 'PAGO' podem ser revertidos.`,
+      );
+    }
+
+    try {
+      return await this.prisma.accountsPayable.update({
+        where: { id },
+        data: { status: PaymentStatus.PENDENTE },
+      });
+    } catch (error) {
+      throw new InternalServerErrorException(
+        'Erro inesperado ao reverter o status do pagamento.',
+      );
+    }
+  }
+
   async ungroupPayments(id: string, userId: string) {
     const tenantId = await this.getTenantIdFromUserId(userId);
     const groupedPayment = await this.prisma.accountsPayable.findFirst({

@@ -86,4 +86,11 @@ export class PaymentsController {
     const userId = req.user.userId;
     return this.paymentsService.updateStatus(id, status, userId);
   }
+
+  @Patch(':id/revert')
+  @Roles('admin', 'user')
+  revertPayment(@Param('id') id: string, @Req() req) {
+    const userId = req.user.userId;
+    return this.paymentsService.revertPaymentToPending(id, userId);
+  }
 }
