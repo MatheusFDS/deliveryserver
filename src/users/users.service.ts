@@ -116,7 +116,7 @@ export class UsersService {
     });
     if (emailAlreadyExistsInUsers) {
       throw new ConflictException(
-        'Um usuário com este e-mail já existe na plataforma. Se for a mesma pessoa, ela não pode ser convidada novamente.',
+        'Um usuário com este e-mail já existe na plataforma. Se for a mesma pessoa, ela не pode ser convidada novamente.',
       );
     }
 
@@ -316,9 +316,15 @@ export class UsersService {
     const requestingUserTenantId =
       await this.getTenantIdFromUserId(requestingUserId);
 
+    // CORREÇÃO: Adicionado 'firebaseUid' ao select
     const userToUpdate = await this.prisma.user.findFirst({
       where: { id, tenantId: requestingUserTenantId },
-      include: { role: true },
+      select: {
+        id: true,
+        name: true,
+        roleId: true,
+        firebaseUid: true,
+      },
     });
     if (!userToUpdate) {
       throw new NotFoundException(
@@ -407,8 +413,13 @@ export class UsersService {
     const requestingUserTenantId =
       await this.getTenantIdFromUserId(requestingUserId);
 
+    // CORREÇÃO: Adicionado 'firebaseUid' ao select
     const userToDelete = await this.prisma.user.findFirst({
       where: { id, tenantId: requestingUserTenantId },
+      select: {
+        id: true,
+        firebaseUid: true,
+      },
     });
 
     if (!userToDelete) {
@@ -435,7 +446,7 @@ export class UsersService {
   }
 
   // --- MÉTODOS DE PLATAFORMA (SUPERADMIN) ---
-
+  // ... (os métodos da plataforma permanecem os mesmos que corrigimos antes) ...
   async createPlatformUser(
     createUserDto: CreateUserDto,
     requestingUserId: string,
@@ -637,7 +648,6 @@ export class UsersService {
 
     const userToUpdate = await this.prisma.user.findUnique({
       where: { id },
-      // CORREÇÃO: Adicionado 'firebaseUid' ao select
       select: {
         id: true,
         roleId: true,
@@ -712,7 +722,6 @@ export class UsersService {
 
     const userToInactivate = await this.prisma.user.findUnique({
       where: { id },
-      // CORREÇÃO: Adicionado 'firebaseUid' ao select
       select: {
         id: true,
         role: true,
@@ -729,8 +738,6 @@ export class UsersService {
         'Superadministradores não podem se inativar.',
       );
     }
-
-    // ... (lógica de verificação do último superadmin)
 
     try {
       await this.authProvider.updateUser(userToInactivate.firebaseUid, {
@@ -757,7 +764,6 @@ export class UsersService {
     }
   }
 
-  // NOVO MÉTODO
   async deletePlatformUser(
     id: string,
     requestingUserId: string,
@@ -770,7 +776,7 @@ export class UsersService {
       );
     }
     if (id === requestingUserId) {
-      throw new BadRequestException('Você не pode excluir a própria conta.');
+      throw new BadRequestException('Você não pode excluir a própria conta.');
     }
     const userToDelete = await this.prisma.user.findUnique({
       where: { id },
