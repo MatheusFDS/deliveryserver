@@ -51,12 +51,7 @@ async function bootstrap() {
 
   const allowedOrigins = [
     'https://deliveryweb-production.up.railway.app',
-    'http://localhost:3000',
-    'http://localhost:8081',
-    'http://10.250.13.156:8080',
-    'http://localhost:3001',
-    'http://127.0.0.1:3000',
-    'http://127.0.0.1:3001',
+    'https://www.rotei.com.br',
   ];
 
   if (process.env.ALLOWED_ORIGINS) {
