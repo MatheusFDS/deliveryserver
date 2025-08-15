@@ -42,7 +42,6 @@ enum ApprovalAction {
 enum PaymentStatus {
   PENDENTE
   PAGO
-  BAIXADO
   CANCELADO
 }
 enum InviteStatus {

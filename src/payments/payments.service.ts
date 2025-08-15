@@ -8,7 +8,6 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreatePaymentDto } from './dto/create-payment.dto';
-// CORREÇÃO: Importar Enums e tipos do Prisma Client
 import { Prisma, PaymentStatus } from '@prisma/client';
 import { startOfDay, endOfDay } from 'date-fns';
 
@@ -40,7 +39,6 @@ export class PaymentsService {
       );
     }
 
-    // CORREÇÃO: Renomeado para driverId
     const driverId = delivery.driverId;
 
     const existingPaymentLink = await this.prisma.paymentDelivery.findFirst({
@@ -56,7 +54,6 @@ export class PaymentsService {
       return await this.prisma.accountsPayable.create({
         data: {
           amount: delivery.valorFrete,
-          // CORREÇÃO: Renomeado para driverId
           driverId: driverId,
           tenantId,
           status: PaymentStatus.PENDENTE,
@@ -94,7 +91,6 @@ export class PaymentsService {
     if (search) {
       where.OR = [
         { id: { contains: search, mode: 'insensitive' } },
-        // CORREÇÃO: camelCase
         { driver: { name: { contains: search, mode: 'insensitive' } } },
       ];
     }
@@ -119,7 +115,6 @@ export class PaymentsService {
           skip,
           take,
           include: {
-            // CORREÇÃO: camelCase
             driver: { select: { name: true } },
             paymentDeliveries: {
               include: { delivery: { select: { id: true } } },
@@ -150,67 +145,55 @@ export class PaymentsService {
     }
   }
 
-  async groupPayments(paymentIds: string[], userId: string) {
+  async markAsPaid(paymentIds: string[], userId: string) {
     const tenantId = await this.getTenantIdFromUserId(userId);
-    if (!paymentIds || paymentIds.length < 2) {
+    if (!paymentIds || paymentIds.length === 0) {
       throw new BadRequestException(
-        'Selecione ao menos dois pagamentos para agrupar.',
+        'É necessário fornecer ao menos um ID de pagamento.',
       );
     }
 
-    const payments = await this.prisma.accountsPayable.findMany({
-      where: { id: { in: paymentIds }, tenantId },
+    const paymentsToUpdate = await this.prisma.accountsPayable.findMany({
+      where: {
+        id: { in: paymentIds },
+        tenantId,
+      },
     });
 
-    if (payments.length !== paymentIds.length) {
+    if (paymentsToUpdate.length !== paymentIds.length) {
       throw new NotFoundException(
-        'Um ou mais pagamentos não foram encontrados.',
+        'Um ou mais pagamentos não foram encontrados ou não pertencem à sua empresa.',
       );
     }
 
-    // CORREÇÃO: Renomeado para driverId
-    const firstDriverId = payments[0].driverId;
-    if (!payments.every((p) => p.driverId === firstDriverId)) {
-      throw new BadRequestException(
-        'Todos os pagamentos devem pertencer ao mesmo motorista.',
-      );
-    }
-    if (
-      !payments.every((p) => p.status === PaymentStatus.PENDENTE && !p.isGroup)
-    ) {
-      throw new BadRequestException(
-        'Apenas pagamentos individuais e "Pendentes" podem ser agrupados.',
-      );
-    }
+    const nonPendingPayments = paymentsToUpdate.filter(
+      (p) => p.status !== PaymentStatus.PENDENTE,
+    );
 
-    const totalAmount = payments.reduce((sum, p) => sum + p.amount, 0);
+    if (nonPendingPayments.length > 0) {
+      throw new BadRequestException(
+        `Apenas pagamentos com status 'PENDENTE' podem ser marcados como pagos.`,
+      );
+    }
 
     try {
-      return await this.prisma.$transaction(async (tx) => {
-        const groupedPayment = await tx.accountsPayable.create({
-          data: {
-            amount: totalAmount,
-            // CORREÇÃO: Renomeado para driverId
-            driverId: firstDriverId,
-            tenantId,
-            status: PaymentStatus.PENDENTE,
-            isGroup: true,
-          },
-        });
-
-        await tx.accountsPayable.updateMany({
-          where: { id: { in: paymentIds } },
-          data: {
-            status: PaymentStatus.BAIXADO,
-            groupedPaymentId: groupedPayment.id,
-          },
-        });
-
-        return groupedPayment;
+      const result = await this.prisma.accountsPayable.updateMany({
+        where: {
+          id: { in: paymentIds },
+          tenantId,
+        },
+        data: {
+          status: PaymentStatus.PAGO,
+        },
       });
+
+      return {
+        message: `${result.count} pagamento(s) marcado(s) como 'Pago'.`,
+        count: result.count,
+      };
     } catch (error) {
       throw new InternalServerErrorException(
-        'Erro inesperado ao agrupar os pagamentos.',
+        'Erro inesperado ao marcar pagamentos como pagos.',
       );
     }
   }
@@ -265,37 +248,6 @@ export class PaymentsService {
     } catch (error) {
       throw new InternalServerErrorException(
         'Erro inesperado ao reverter o status do pagamento.',
-      );
-    }
-  }
-
-  async ungroupPayments(id: string, userId: string) {
-    const tenantId = await this.getTenantIdFromUserId(userId);
-    const groupedPayment = await this.prisma.accountsPayable.findFirst({
-      where: { id, tenantId, isGroup: true },
-    });
-
-    if (!groupedPayment) {
-      throw new NotFoundException('Pagamento agrupado não encontrado.');
-    }
-    if (groupedPayment.status === PaymentStatus.BAIXADO) {
-      throw new BadRequestException(
-        'Não é possível desagrupar um pagamento que já foi baixado.',
-      );
-    }
-
-    try {
-      return await this.prisma.$transaction(async (tx) => {
-        await tx.accountsPayable.updateMany({
-          where: { groupedPaymentId: id },
-          data: { status: PaymentStatus.PENDENTE, groupedPaymentId: null },
-        });
-        await tx.accountsPayable.delete({ where: { id } });
-        return { message: 'Pagamento desagrupado com sucesso.' };
-      });
-    } catch (error) {
-      throw new InternalServerErrorException(
-        'Erro inesperado ao desagrupar pagamentos.',
       );
     }
   }

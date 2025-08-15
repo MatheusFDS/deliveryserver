@@ -13,11 +13,9 @@ import {
 } from '@nestjs/common';
 import { PaymentsService } from './payments.service';
 import { CreatePaymentDto } from './dto/create-payment.dto';
-import { CreateGroupPaymentDto } from './dto/create-group-payment.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
-// CORREÇÃO: Importar o Enum diretamente do Prisma Client
 import { PaymentStatus } from '@prisma/client';
 
 @Controller('payments')
@@ -56,24 +54,11 @@ export class PaymentsController {
     );
   }
 
-  @Post('group')
+  @Post('mark-as-paid')
   @Roles('admin', 'user')
-  groupPayments(
-    @Body() createGroupPaymentDto: CreateGroupPaymentDto,
-    @Req() req,
-  ) {
+  markAsPaid(@Body('paymentIds') paymentIds: string[], @Req() req) {
     const userId = req.user.userId;
-    return this.paymentsService.groupPayments(
-      createGroupPaymentDto.paymentIds,
-      userId,
-    );
-  }
-
-  @Post('ungroup/:id')
-  @Roles('admin', 'user')
-  ungroupPayments(@Param('id') id: string, @Req() req) {
-    const userId = req.user.userId;
-    return this.paymentsService.ungroupPayments(id, userId);
+    return this.paymentsService.markAsPaid(paymentIds, userId);
   }
 
   @Patch(':id/status')
