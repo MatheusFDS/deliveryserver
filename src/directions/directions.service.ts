@@ -26,6 +26,34 @@ export class DirectionsService {
     return user.tenantId;
   }
 
+  private async generateTenantCode(
+    tx: Prisma.TransactionClient,
+    tenantId: string,
+    entityType: string,
+    prefix: string,
+  ): Promise<string> {
+    const sequence = await tx.sequence.upsert({
+      where: {
+        entityType_tenantId: { entityType, tenantId },
+      },
+      update: {
+        nextValue: {
+          increment: 1,
+        },
+      },
+      create: {
+        entityType,
+        tenantId,
+        nextValue: 2,
+      },
+      select: {
+        nextValue: true,
+      },
+    });
+    const currentValue = sequence.nextValue - 1;
+    return `${prefix}-${String(currentValue).padStart(6, '0')}`;
+  }
+
   private async checkOverlap(
     tenantId: string,
     rangeInicio: string,
@@ -81,11 +109,21 @@ export class DirectionsService {
     );
 
     try {
-      return await this.prisma.directions.create({
-        data: {
-          ...createDirectionsDto,
+      return await this.prisma.$transaction(async (tx) => {
+        const code = await this.generateTenantCode(
+          tx,
           tenantId,
-        },
+          'DIRECTIONS',
+          'REG',
+        );
+
+        return await tx.directions.create({
+          data: {
+            ...createDirectionsDto,
+            tenantId,
+            code,
+          },
+        });
       });
     } catch (error) {
       throw new InternalServerErrorException(
@@ -107,7 +145,10 @@ export class DirectionsService {
     const where: Prisma.DirectionsWhereInput = { tenantId };
 
     if (search) {
-      where.OR = [{ regiao: { contains: search, mode: 'insensitive' } }];
+      where.OR = [
+        { regiao: { contains: search, mode: 'insensitive' } },
+        { code: { contains: search, mode: 'insensitive' } },
+      ];
     }
 
     try {

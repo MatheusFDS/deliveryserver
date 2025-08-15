@@ -26,6 +26,34 @@ export class VehiclesService {
     return user.tenantId;
   }
 
+  private async generateTenantCode(
+    tx: Prisma.TransactionClient,
+    tenantId: string,
+    entityType: string,
+    prefix: string,
+  ): Promise<string> {
+    const sequence = await tx.sequence.upsert({
+      where: {
+        entityType_tenantId: { entityType, tenantId },
+      },
+      update: {
+        nextValue: {
+          increment: 1,
+        },
+      },
+      create: {
+        entityType,
+        tenantId,
+        nextValue: 2,
+      },
+      select: {
+        nextValue: true,
+      },
+    });
+    const currentValue = sequence.nextValue - 1;
+    return `${prefix}-${String(currentValue).padStart(6, '0')}`;
+  }
+
   async create(createVehicleDto: CreateVehicleDto, userId: string) {
     const tenantId = await this.getTenantIdFromUserId(userId);
 
@@ -57,11 +85,20 @@ export class VehiclesService {
     }
 
     try {
-      return this.prisma.vehicle.create({
-        data: {
-          ...createVehicleDto,
-          tenantId: tenantId,
-        },
+      return await this.prisma.$transaction(async (tx) => {
+        const code = await this.generateTenantCode(
+          tx,
+          tenantId,
+          'VEHICLE',
+          'VCL',
+        );
+        return tx.vehicle.create({
+          data: {
+            ...createVehicleDto,
+            tenantId: tenantId,
+            code,
+          },
+        });
       });
     } catch (error: any) {
       if (
@@ -103,12 +140,11 @@ export class VehiclesService {
       where.OR = [
         { model: { contains: search, mode: 'insensitive' } },
         { plate: { contains: search, mode: 'insensitive' } },
-        // CORREÇÃO: camelCase
         { driver: { is: { name: { contains: search, mode: 'insensitive' } } } },
         {
-          // CORREÇÃO: camelCase
           category: { is: { name: { contains: search, mode: 'insensitive' } } },
         },
+        { code: { contains: search, mode: 'insensitive' } },
       ];
     }
 
@@ -118,11 +154,9 @@ export class VehiclesService {
         skip,
         take,
         include: {
-          // CORREÇÃO: camelCase
           driver: {
             select: { name: true },
           },
-          // CORREÇÃO: camelCase
           category: {
             select: { name: true },
           },

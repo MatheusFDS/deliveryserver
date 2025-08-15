@@ -57,6 +57,7 @@ enum InviteStatus {
 
 model User {
   id             String         @id @default(uuid())
+  code           String?
   isActive       Boolean        @default(true)
   email          String         @unique
   password       String?
@@ -75,8 +76,9 @@ model User {
   approvals      Approval[]
   orderHistories OrderHistory[]
   notifications  Notification[]
+  UserInvite     UserInvite[]   @relation("UserInvites")
 
-  UserInvite UserInvite[] @relation("UserInvites")
+  @@unique([code, tenantId])
 }
 
 model Role {
@@ -87,8 +89,7 @@ model Role {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
   users          User[]
-
-  UserInvite UserInvite[]
+  UserInvite     UserInvite[]
 }
 
 model Tenant {
@@ -122,9 +123,9 @@ model Tenant {
   approvals             Approval[]
   optimizedRoutes       OptimizedRoute[]
   notifications         Notification[]
-  invites               UserInvite[] // Relação inversa
-
-  Lead Lead[]
+  invites               UserInvite[]
+  Lead                  Lead[]
+  sequences             Sequence[]
 }
 
 model UserSettings {
@@ -138,6 +139,7 @@ model UserSettings {
 
 model Driver {
   id              String            @id @default(uuid())
+  code            String?
   name            String
   license         String
   cpf             String
@@ -153,12 +155,14 @@ model Driver {
   accountsPayable AccountsPayable[]
   deliveryProofs  DeliveryProof[]
 
+  @@unique([code, tenantId])
   @@unique([cpf, tenantId])
   @@index([tenantId])
 }
 
 model Vehicle {
   id         String   @id @default(uuid())
+  code       String?
   model      String
   plate      String
   cubagem    Float?
@@ -173,6 +177,7 @@ model Vehicle {
   category   Category @relation(fields: [categoryId], references: [id])
   deliveries Delivery[]
 
+  @@unique([code, tenantId])
   @@unique([plate, tenantId])
   @@index([tenantId])
   @@index([driverId])
@@ -239,6 +244,7 @@ model OrderHistory {
 
 model Directions {
   id           String   @id @default(uuid())
+  code         String?
   rangeInicio  String
   rangeFim     String
   valorDirecao Int
@@ -248,11 +254,13 @@ model Directions {
   updatedAt    DateTime @updatedAt
   tenant       Tenant   @relation(fields: [tenantId], references: [id])
 
+  @@unique([code, tenantId])
   @@index([tenantId])
 }
 
 model Delivery {
   id                String            @id @default(uuid())
+  code              String?
   driverId          String
   vehicleId         String
   valorFrete        Float
@@ -273,6 +281,7 @@ model Delivery {
   paymentDeliveries PaymentDelivery[]
   approvals         Approval[]
 
+  @@unique([code, tenantId])
   @@index([tenantId])
   @@index([driverId])
 }
@@ -296,6 +305,7 @@ model Approval {
 
 model Category {
   id        String    @id @default(uuid())
+  code      String?
   name      String
   valor     Float
   tenantId  String
@@ -304,11 +314,13 @@ model Category {
   tenant    Tenant    @relation(fields: [tenantId], references: [id])
   vehicles  Vehicle[]
 
+  @@unique([code, tenantId])
   @@unique([name, tenantId])
 }
 
 model AccountsPayable {
   id                String            @id @default(uuid())
+  code              String?
   amount            Float
   status            PaymentStatus     @default(PENDENTE)
   tenantId          String
@@ -322,6 +334,8 @@ model AccountsPayable {
   tenant            Tenant            @relation(fields: [tenantId], references: [id])
   driver            Driver            @relation(fields: [driverId], references: [id])
   paymentDeliveries PaymentDelivery[]
+
+  @@unique([code, tenantId])
 }
 
 model PaymentDelivery {
@@ -404,31 +418,28 @@ model UserInvite {
   expiresAt DateTime
   createdAt DateTime    @default(now())
   updatedAt DateTime    @updatedAt
-
-  role      Role     @relation(fields: [roleId], references: [id])
-  tenant    Tenant?  @relation(fields: [tenantId], references: [id])
-  inviter   User     @relation("UserInvites", fields: [invitedBy], references: [id])
+  role      Role        @relation(fields: [roleId], references: [id])
+  tenant    Tenant?     @relation(fields: [tenantId], references: [id])
+  inviter   User        @relation("UserInvites", fields: [invitedBy], references: [id])
 
   @@unique([email, tenantId, status])
 }
 
 model Lead {
-  id          String   @id @default(cuid())
+  id          String     @id @default(cuid())
   companyName String
   contactName String
   email       String
   phone       String
-  cnpj        String   @default("")
+  cnpj        String     @default("")
   message     String?
-  source      String   @default("landing-page")
+  source      String     @default("landing-page")
   status      LeadStatus @default(NEW)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  
-  // Relacionamentos opcionais
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
   tenantId    String?
-  tenant      Tenant?  @relation(fields: [tenantId], references: [id])
-  
+  tenant      Tenant?    @relation(fields: [tenantId], references: [id])
+
   @@map("leads")
 }
 
@@ -439,4 +450,15 @@ enum LeadStatus {
   DEMO_SCHEDULED
   CONVERTED
   LOST
+}
+
+model Sequence {
+  id         String @id @default(cuid())
+  entityType String
+  tenantId   String
+  nextValue  Int    @default(1)
+  tenant     Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([entityType, tenantId])
+  @@index([tenantId])
 }

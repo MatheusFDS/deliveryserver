@@ -48,8 +48,16 @@ export class DriversService {
         },
       });
 
+      const code = await this.generateTenantCode(
+        tx,
+        invite.tenantId,
+        'DRIVER',
+        'MOT',
+      );
+
       await tx.driver.create({
         data: {
+          code,
           name: user.name,
           cpf: profileData.cpf,
           license: profileData.license,
@@ -86,6 +94,34 @@ export class DriversService {
       );
     }
     return driver;
+  }
+
+  private async generateTenantCode(
+    tx: Prisma.TransactionClient,
+    tenantId: string,
+    entityType: string,
+    prefix: string,
+  ): Promise<string> {
+    const sequence = await tx.sequence.upsert({
+      where: {
+        entityType_tenantId: { entityType, tenantId },
+      },
+      update: {
+        nextValue: {
+          increment: 1,
+        },
+      },
+      create: {
+        entityType,
+        tenantId,
+        nextValue: 2,
+      },
+      select: {
+        nextValue: true,
+      },
+    });
+    const currentValue = sequence.nextValue - 1;
+    return `${prefix}-${String(currentValue).padStart(6, '0')}`;
   }
 
   async create(createDriverDto: CreateDriverDto, userId: string) {
@@ -141,9 +177,17 @@ export class DriversService {
     }
 
     try {
-      return this.prisma.driver.create({
-        data: { ...createDriverDto, tenantId },
-        include: { user: { select: { id: true, name: true, email: true } } },
+      return await this.prisma.$transaction(async (tx) => {
+        const code = await this.generateTenantCode(
+          tx,
+          tenantId,
+          'DRIVER',
+          'MOT',
+        );
+        return tx.driver.create({
+          data: { ...createDriverDto, tenantId, code },
+          include: { user: { select: { id: true, name: true, email: true } } },
+        });
       });
     } catch (error) {
       throw new InternalServerErrorException(
@@ -172,6 +216,7 @@ export class DriversService {
         { cpf: { contains: search, mode: 'insensitive' } },
         { license: { contains: search, mode: 'insensitive' } },
         { user: { name: { contains: search, mode: 'insensitive' } } },
+        { code: { contains: search, mode: 'insensitive' } },
       ];
     }
 
@@ -328,7 +373,7 @@ export class DriversService {
     });
     if (!driver) {
       throw new NotFoundException(
-        'Motorista não encontrado ou не pertence à sua empresa.',
+        'Motorista não encontrado ou não pertence à sua empresa.',
       );
     }
 
@@ -369,7 +414,7 @@ export class DriversService {
 
     if (!order) {
       throw new NotFoundException(
-        'Pedido não encontrado ou не pertence a este motorista.',
+        'Pedido não encontrado ou não pertence a este motorista.',
       );
     }
 
@@ -386,7 +431,7 @@ export class DriversService {
     });
     if (!order) {
       throw new NotFoundException(
-        'Pedido não encontrado ou не pertence a este motorista.',
+        'Pedido não encontrado ou não pertence a este motorista.',
       );
     }
 

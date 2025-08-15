@@ -68,6 +68,34 @@ export class UsersService {
     return user;
   }
 
+  private async generateTenantCode(
+    tx: Prisma.TransactionClient,
+    tenantId: string,
+    entityType: string,
+    prefix: string,
+  ): Promise<string> {
+    const sequence = await tx.sequence.upsert({
+      where: {
+        entityType_tenantId: { entityType, tenantId },
+      },
+      update: {
+        nextValue: {
+          increment: 1,
+        },
+      },
+      create: {
+        entityType,
+        tenantId,
+        nextValue: 2,
+      },
+      select: {
+        nextValue: true,
+      },
+    });
+    const currentValue = sequence.nextValue - 1;
+    return `${prefix}-${String(currentValue).padStart(6, '0')}`;
+  }
+
   async forgotPassword(
     forgotPasswordDto: ForgotPasswordDto,
   ): Promise<{ message: string }> {
@@ -116,7 +144,7 @@ export class UsersService {
     });
     if (emailAlreadyExistsInUsers) {
       throw new ConflictException(
-        'Um usuário com este e-mail já existe na plataforma. Se for a mesma pessoa, ela не pode ser convidada novamente.',
+        'Um usuário com este e-mail já existe na plataforma. Se for a mesma pessoa, ela não pode ser convidada novamente.',
       );
     }
 
@@ -211,6 +239,7 @@ export class UsersService {
       where.OR = [
         { name: { contains: search, mode: 'insensitive' } },
         { email: { contains: search, mode: 'insensitive' } },
+        { code: { contains: search, mode: 'insensitive' } },
       ];
     }
 
@@ -227,6 +256,7 @@ export class UsersService {
             role: { select: { id: true, name: true } },
             roleId: true,
             isActive: true,
+            code: true,
           },
           orderBy: { name: 'asc' },
         }),
@@ -274,6 +304,7 @@ export class UsersService {
         isActive: true,
         createdAt: true,
         updatedAt: true,
+        code: true,
       },
     });
     if (!user) {
@@ -294,6 +325,7 @@ export class UsersService {
         name: true,
         role: { select: { name: true } },
         isActive: true,
+        code: true,
       },
     });
     if (!user) {
@@ -316,7 +348,6 @@ export class UsersService {
     const requestingUserTenantId =
       await this.getTenantIdFromUserId(requestingUserId);
 
-    // CORREÇÃO: Adicionado 'firebaseUid' ao select
     const userToUpdate = await this.prisma.user.findFirst({
       where: { id, tenantId: requestingUserTenantId },
       select: {
@@ -396,6 +427,7 @@ export class UsersService {
           email: true,
           role: { select: { name: true } },
           isActive: true,
+          code: true,
         },
       });
     } catch (error) {
@@ -413,7 +445,6 @@ export class UsersService {
     const requestingUserTenantId =
       await this.getTenantIdFromUserId(requestingUserId);
 
-    // CORREÇÃO: Adicionado 'firebaseUid' ao select
     const userToDelete = await this.prisma.user.findFirst({
       where: { id, tenantId: requestingUserTenantId },
       select: {
@@ -445,8 +476,6 @@ export class UsersService {
     }
   }
 
-  // --- MÉTODOS DE PLATAFORMA (SUPERADMIN) ---
-  // ... (os métodos da plataforma permanecem os mesmos que corrigimos antes) ...
   async createPlatformUser(
     createUserDto: CreateUserDto,
     requestingUserId: string,
@@ -509,24 +538,32 @@ export class UsersService {
     });
 
     try {
-      const hashedPassword = await bcrypt.hash(password, 10);
-      return this.prisma.user.create({
-        data: {
-          ...data,
-          password: hashedPassword,
-          tenantId: targetTenantId,
-          roleId: roleId,
-          isActive: true,
-          firebaseUid: firebaseUser.uid,
-        },
-        select: {
-          id: true,
-          email: true,
-          name: true,
-          role: { select: { name: true } },
-          tenantId: true,
-          isActive: true,
-        },
+      return await this.prisma.$transaction(async (tx) => {
+        const code = targetTenantId
+          ? await this.generateTenantCode(tx, targetTenantId, 'USER', 'USR')
+          : null;
+
+        const hashedPassword = await bcrypt.hash(password, 10);
+        return tx.user.create({
+          data: {
+            ...data,
+            code,
+            password: hashedPassword,
+            tenantId: targetTenantId,
+            roleId: roleId,
+            isActive: true,
+            firebaseUid: firebaseUser.uid,
+          },
+          select: {
+            id: true,
+            email: true,
+            name: true,
+            role: { select: { name: true } },
+            tenantId: true,
+            isActive: true,
+            code: true,
+          },
+        });
       });
     } catch (error) {
       await this.authProvider.deleteUser(firebaseUser.uid);
@@ -566,6 +603,7 @@ export class UsersService {
       where.OR = [
         { name: { contains: searchTerm, mode: 'insensitive' } },
         { email: { contains: searchTerm, mode: 'insensitive' } },
+        { code: { contains: searchTerm, mode: 'insensitive' } },
       ];
     }
 
@@ -584,6 +622,7 @@ export class UsersService {
             tenantId: true,
             isActive: true,
             tenant: { select: { name: true } },
+            code: true,
           },
           orderBy: { name: 'asc' },
         }),
@@ -625,6 +664,7 @@ export class UsersService {
         createdAt: true,
         updatedAt: true,
         tenant: { select: { name: true } },
+        code: true,
       },
     });
     if (!user) {
@@ -701,6 +741,7 @@ export class UsersService {
           role: { select: { name: true } },
           tenantId: true,
           isActive: true,
+          code: true,
         },
       });
     } catch (error) {
@@ -754,6 +795,7 @@ export class UsersService {
           role: { select: { name: true } },
           tenantId: true,
           isActive: true,
+          code: true,
         },
       });
     } catch (error) {

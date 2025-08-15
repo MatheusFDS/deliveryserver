@@ -117,15 +117,39 @@ export class DeliveryService {
         const notificationPromises = notifications.map(async (notifyFn) => {
           try {
             await notifyFn();
-          } catch (error) {
-            // Silent error handling
-          }
+          } catch (error) {}
         });
         await Promise.allSettled(notificationPromises);
-      } catch (error) {
-        // Silent error handling
-      }
+      } catch (error) {}
     });
+  }
+
+  private async generateTenantCode(
+    tx: Prisma.TransactionClient,
+    tenantId: string,
+    entityType: string,
+    prefix: string,
+  ): Promise<string> {
+    const sequence = await tx.sequence.upsert({
+      where: {
+        entityType_tenantId: { entityType, tenantId },
+      },
+      update: {
+        nextValue: {
+          increment: 1,
+        },
+      },
+      create: {
+        entityType,
+        tenantId,
+        nextValue: 2,
+      },
+      select: {
+        nextValue: true,
+      },
+    });
+    const currentValue = sequence.nextValue - 1;
+    return `${prefix}-${String(currentValue).padStart(6, '0')}`;
   }
 
   async create(createDeliveryDto: CreateDeliveryDto, userId: string) {
@@ -185,8 +209,16 @@ export class DeliveryService {
       : OrderStatus.EM_ROTA;
 
     const delivery = await this.prisma.$transaction(async (tx) => {
+      const code = await this.generateTenantCode(
+        tx,
+        tenantId,
+        'DELIVERY',
+        'ROT',
+      );
+
       const createdDelivery = await tx.delivery.create({
         data: {
+          code,
           driverId,
           vehicleId,
           tenantId,
@@ -296,6 +328,7 @@ export class DeliveryService {
       where.OR = [
         { driver: { name: { contains: search, mode: 'insensitive' } } },
         { vehicle: { plate: { contains: search, mode: 'insensitive' } } },
+        { code: { contains: search, mode: 'insensitive' } },
       ];
     }
     if (status) {
@@ -550,8 +583,6 @@ export class DeliveryService {
       });
       deliveryCompleted = true;
 
-      // ---- CORREÇÃO APLICADA AQUI ----
-      // Monta o DTO completo para criar o pagamento.
       try {
         const paymentDto = {
           amount: deliveryToFinalize.valorFrete,
@@ -561,7 +592,6 @@ export class DeliveryService {
           deliveryId: deliveryToFinalize.id,
         };
 
-        // Chama o serviço de pagamento com o DTO correto.
         await this.paymentsService.create(paymentDto, userId);
       } catch (error) {
         console.error(
