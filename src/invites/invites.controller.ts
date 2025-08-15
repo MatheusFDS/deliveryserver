@@ -10,7 +10,7 @@ import {
   Inject,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { InviteStatus } from '@prisma/client';
+import { InviteStatus, Prisma } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import { DriversService } from '../drivers/drivers.service';
 import {
@@ -33,6 +33,34 @@ export class InvitesController {
     private readonly driversService: DriversService,
     @Inject(AUTH_PROVIDER) private readonly authProvider: IAuthProvider,
   ) {}
+
+  private async generateTenantCode(
+    tx: Prisma.TransactionClient,
+    tenantId: string,
+    entityType: string,
+    prefix: string,
+  ): Promise<string> {
+    const sequence = await tx.sequence.upsert({
+      where: {
+        entityType_tenantId: { entityType, tenantId },
+      },
+      update: {
+        nextValue: {
+          increment: 1,
+        },
+      },
+      create: {
+        entityType,
+        tenantId,
+        nextValue: 2,
+      },
+      select: {
+        nextValue: true,
+      },
+    });
+    const currentValue = sequence.nextValue - 1;
+    return `${prefix}-${String(currentValue).padStart(6, '0')}`;
+  }
 
   @Get(':token')
   async getInviteDetails(@Param('token', ParseUUIDPipe) token: string) {
@@ -116,33 +144,42 @@ export class InvitesController {
     try {
       const hashedPassword = await bcrypt.hash(acceptDto.password, 10);
 
-      if (invite.role.name === 'driver') {
-        if (!acceptDto.cpf || !acceptDto.license) {
-          throw new BadRequestException(
-            'CPF e CNH são obrigatórios para motoristas.',
+      createdUser = await this.prisma.$transaction(async (tx) => {
+        if (invite.role.name === 'driver') {
+          if (!acceptDto.cpf || !acceptDto.license) {
+            throw new BadRequestException(
+              'CPF e CNH são obrigatórios para motoristas.',
+            );
+          }
+          return this.driversService.createFromInvite(
+            {
+              ...acceptDto,
+              firebaseUid: firebaseUser.uid,
+              password: hashedPassword,
+            },
+            { tenantId: invite.tenantId, roleId: invite.roleId },
           );
+        } else {
+          const userCode = await this.generateTenantCode(
+            tx,
+            invite.tenantId,
+            'USER',
+            'USR',
+          );
+          return await tx.user.create({
+            data: {
+              email: acceptDto.email,
+              name: acceptDto.name,
+              password: hashedPassword,
+              tenantId: invite.tenantId,
+              roleId: invite.roleId,
+              firebaseUid: firebaseUser.uid,
+              isActive: true,
+              code: userCode,
+            },
+          });
         }
-        createdUser = await this.driversService.createFromInvite(
-          {
-            ...acceptDto,
-            firebaseUid: firebaseUser.uid,
-            password: hashedPassword,
-          },
-          { tenantId: invite.tenantId, roleId: invite.roleId },
-        );
-      } else {
-        createdUser = await this.prisma.user.create({
-          data: {
-            email: acceptDto.email,
-            name: acceptDto.name,
-            password: hashedPassword,
-            tenantId: invite.tenantId,
-            roleId: invite.roleId,
-            firebaseUid: firebaseUser.uid,
-            isActive: true,
-          },
-        });
-      }
+      });
 
       await this.prisma.userInvite.update({
         where: { id: token },

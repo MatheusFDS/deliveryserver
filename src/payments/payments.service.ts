@@ -26,6 +26,34 @@ export class PaymentsService {
     return user.tenantId;
   }
 
+  private async generateTenantCode(
+    tx: Prisma.TransactionClient,
+    tenantId: string,
+    entityType: string,
+    prefix: string,
+  ): Promise<string> {
+    const sequence = await tx.sequence.upsert({
+      where: {
+        entityType_tenantId: { entityType, tenantId },
+      },
+      update: {
+        nextValue: {
+          increment: 1,
+        },
+      },
+      create: {
+        entityType,
+        tenantId,
+        nextValue: 2,
+      },
+      select: {
+        nextValue: true,
+      },
+    });
+    const currentValue = sequence.nextValue - 1;
+    return `${prefix}-${String(currentValue).padStart(6, '0')}`;
+  }
+
   async create(createPaymentDto: CreatePaymentDto, userId: string) {
     const tenantId = await this.getTenantIdFromUserId(userId);
     const { deliveryId } = createPaymentDto;
@@ -51,20 +79,29 @@ export class PaymentsService {
     }
 
     try {
-      return await this.prisma.accountsPayable.create({
-        data: {
-          amount: delivery.valorFrete,
-          driverId: driverId,
+      return await this.prisma.$transaction(async (tx) => {
+        const code = await this.generateTenantCode(
+          tx,
           tenantId,
-          status: PaymentStatus.PENDENTE,
-          isGroup: false,
-          paymentDeliveries: {
-            create: {
-              deliveryId: deliveryId,
-              tenantId: tenantId,
+          'PAYMENT',
+          'PAG',
+        );
+        return await tx.accountsPayable.create({
+          data: {
+            code,
+            amount: delivery.valorFrete,
+            driverId: driverId,
+            tenantId,
+            status: PaymentStatus.PENDENTE,
+            isGroup: false,
+            paymentDeliveries: {
+              create: {
+                deliveryId: deliveryId,
+                tenantId: tenantId,
+              },
             },
           },
-        },
+        });
       });
     } catch (error) {
       throw new InternalServerErrorException(
@@ -92,6 +129,7 @@ export class PaymentsService {
       where.OR = [
         { id: { contains: search, mode: 'insensitive' } },
         { driver: { name: { contains: search, mode: 'insensitive' } } },
+        { code: { contains: search, mode: 'insensitive' } },
       ];
     }
     if (status) {
@@ -117,12 +155,12 @@ export class PaymentsService {
           include: {
             driver: { select: { name: true } },
             paymentDeliveries: {
-              include: { delivery: { select: { id: true } } },
+              include: { delivery: { select: { id: true, code: true } } },
             },
             groupedPayments: {
               select: {
                 paymentDeliveries: {
-                  include: { delivery: { select: { id: true } } },
+                  include: { delivery: { select: { id: true, code: true } } },
                 },
               },
             },
