@@ -19,7 +19,7 @@ export class LandingService {
         contactName: contactData.contactName,
         email: contactData.email,
         phone: contactData.phone,
-        fleetSize: contactData.fleetSize,
+        cnpj: contactData.cnpj,
         message: contactData.message,
         source: contactData.source || 'landing-page',
         status: 'NEW',

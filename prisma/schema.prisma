@@ -419,7 +419,7 @@ model Lead {
   contactName String
   email       String
   phone       String
-  fleetSize   Int?
+  cnpj        String   @default("")
   message     String?
   source      String   @default("landing-page")
   status      LeadStatus @default(NEW)

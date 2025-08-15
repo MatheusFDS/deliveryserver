@@ -66,8 +66,6 @@ async function bootstrap() {
     allowedOrigins.push(...envOrigins);
   }
 
-  console.log('Origins permitidas:', allowedOrigins);
-
   const corsOptions: CorsOptions = {
     origin: (origin, callback) => {
       if (!origin || allowedOrigins.includes(origin)) {
@@ -93,14 +91,6 @@ async function bootstrap() {
   // 4. Adicionar a linha para servir arquivos estáticos da pasta 'uploads'
   app.useStaticAssets(join(process.cwd(), 'uploads'), {
     prefix: '/uploads/',
-  });
-
-  app.use('/landing', (req, res, next) => {
-    if (req.path === '/' || req.path === '/index.html') {
-      res.sendFile(join(process.cwd(), 'landing', 'index.html'));
-    } else {
-      next();
-    }
   });
 
   app.useGlobalPipes(

@@ -19,14 +19,19 @@ export class LandingController {
       const lead = await this.landingService.createLead(contactData);
 
       // Enviar notificação para equipe comercial
-      await this.landingService.notifyNewLead(lead);
+      this.landingService.notifyNewLead(lead);
 
+      // CORREÇÃO: A resposta agora está encapsulada em um objeto "data"
       return {
         success: true,
-        message: 'Obrigado pelo interesse! Entraremos em contato em breve.',
-        leadId: lead.id,
+        message: 'Resposta processada com sucesso.', // Mensagem genérica da API
+        data: {
+          message: 'Obrigado pelo interesse! Entraremos em contato em breve.',
+          leadId: lead.id,
+        },
       };
     } catch (error) {
+      // O AppExceptionFilter cuidará de formatar este erro.
       throw new HttpException(
         'Erro ao processar solicitação. Tente novamente.',
         HttpStatus.INTERNAL_SERVER_ERROR,
